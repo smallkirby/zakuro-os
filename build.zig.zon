@@ -8,6 +8,11 @@
             .hash = "1220a420db55114e882dd069f3bfc421da4520a63c190fbde3634aa8813c21ec7660",
             .lazy = false,
         },
+        .string = .{
+            .url = "https://github.com/JakubSzark/zig-string/archive/refs/heads/master.tar.gz",
+            .hash = "1220ac012ef4f5f1c488bdfbb8f5b5c42cefde0c0916a7e7f8f63c15b4ab085cc876",
+            .lazy = false,
+        },
     },
 
     // Specifies the set of files and directories that are included in this package.
