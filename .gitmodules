@@ -1,3 +1,6 @@
 [submodule "edk2"]
 	path = edk2
 	url = https://github.com/tianocore/edk2.git
+[submodule "deps/chameleon"]
+	path = deps/chameleon
+	url = https://github.com/tr1ckydev/chameleon.git
