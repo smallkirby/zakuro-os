@@ -1,0 +1,14 @@
+# This is an EDK2 Decllaration file.
+# This file declares what is available in the package and tell the build system
+# where to find necessary resouces.
+# cf. https://github.com/tianocore/tianocore.github.io/wiki/Build-Description-Files
+
+[Defines]
+  # Supported EDK2 DEC specs.
+  DEC_SPECIFICATION              = 0x00010005
+  # Name of the package.
+  PACKAGE_NAME                   = ZakuroLoaderPkg
+  # Unique GUID for the package.
+  PACKAGE_GUID                   = ec10ca6c-1a7e-4a0a-bf49-d171d7e36f8c
+  # Version of the package.
+  PACKAGE_VERSION                = 0.0

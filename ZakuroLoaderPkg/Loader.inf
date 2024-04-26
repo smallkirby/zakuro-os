@@ -1,0 +1,25 @@
+# This is an EDK2 Build Information file.
+# This file describes how to build a module.
+# cf. https://github.com/tianocore/tianocore.github.io/wiki/Build-Description-Files#the-inf-file
+
+[Defines]
+  INF_VERSION                    = 0x00010006
+  BASE_NAME                      = Loader
+  FILE_GUID                      = 2ecb39f9-21c2-45a0-994c-8d5eb513f300
+  MODULE_TYPE                    = UEFI_APPLICATION
+  VERSION_STRING                 = 0.0
+  ENTRY_POINT                    = UefiMain
+
+[Sources]
+  Main.c
+
+[Packages]
+  MdePkg/MdePkg.dec
+
+[LibraryClasses]
+  UefiLib
+  UefiApplicationEntryPoint
+
+[Guids]
+
+[Protocols]
