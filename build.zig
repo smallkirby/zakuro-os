@@ -24,6 +24,22 @@ pub fn build(b: *std.Build) void {
     // step when running `zig build`).
     b.installArtifact(exe);
 
+    // Declare a tool to check for submodule updates and initialization.
+    const ensure_submodule = b.addExecutable(.{
+        .name = "ensure_submodule",
+        .root_source_file = b.path("tools/ensure_submodule.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const chameleon = b.dependency("chameleon", .{});
+    ensure_submodule.root_module.addImport("chameleon", chameleon.module("chameleon"));
+
+    const ensure_submodule_cmd = b.addRunArtifact(ensure_submodule);
+    ensure_submodule_cmd.step.dependOn(&ensure_submodule.step);
+    const run_ensure_submodule_step = b.step("ensure_submodule", "Ensure submodule is up-to-date");
+    run_ensure_submodule_step.dependOn(&ensure_submodule_cmd.step);
+    exe.step.dependOn(run_ensure_submodule_step);
+
     // This *creates* a Run step in the build graph, to be executed when another
     // step is evaluated that depends on it. The next line below will establish
     // such a dependency.
