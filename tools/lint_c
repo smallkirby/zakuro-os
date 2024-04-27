@@ -1,0 +1,42 @@
+#!/bin/bash
+
+set -eu
+
+export C_RST="\e[0m"
+export C_RED="\e[31m"
+
+# check if --fix flag is given
+
+if [ "$#" -eq 1 ] && [ "$1" = "--fix" ]; then
+  readonly FIX=1
+else
+  readonly FIX=0
+fi
+
+files=$(
+  find ./ZakuroLoaderPkg \
+    -type f \
+    \( -name "*.c" -o -name "*.cpp" -o -name "*.h" -o -name "*.hpp" \)
+)
+
+has_error=0
+
+for file in $files; do
+  if [ "$FIX" -eq 1 ]; then
+    clang-format -i "$file"
+    continue
+  fi
+
+  difference=$(diff "$file" <(clang-format "$file") || echo "")
+  if [ -n "$difference" ]; then
+    echo -e "${C_RED}$file${C_RST}"
+    echo "$difference"
+    has_error=1
+  fi
+done
+
+if [ "$has_error" -eq 0 ]; then
+  exit 0
+else
+  exit 1
+fi

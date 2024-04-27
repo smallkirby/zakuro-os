@@ -60,6 +60,13 @@ pub fn build(b: *std.Build) void {
     const run_step = b.step("run", "Run the kernel on QEMU");
     run_step.dependOn(&run_qemu_cmd.step);
 
+    // Declare a run step to run C linter.
+    const run_clint_cmd = b.addSystemCommand(&.{
+        "tools/lint_c",
+    });
+    const run_clint_step = b.step("lint_c", "Run C linter");
+    run_clint_step.dependOn(&run_clint_cmd.step);
+
     // Test step
     const exe_unit_tests = b.addTest(.{
         .root_source_file = b.path("src/main.zig"),
