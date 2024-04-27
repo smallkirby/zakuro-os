@@ -14,10 +14,9 @@ pub const std_options = std.Options{
     .logFn = plog.logFunc,
 };
 
-const CommandResult = struct {
-    status: u8,
-    stdout: []const u8,
-    stderr: []const u8,
+const TargetEntry = struct {
+    key: []const u8,
+    value: []const u8,
 };
 
 fn change_value(
@@ -42,7 +41,7 @@ fn change_value(
     unreachable;
 }
 
-fn modify_target_file(allocator: std.mem.Allocator) !void {
+fn modify_target_file(allocator: std.mem.Allocator, entries: []const TargetEntry) !void {
     const edk2_dir = try fs.cwd().openDir(EDK2_DIRNAME, .{});
     const target_file = try edk2_dir.openFile("Conf/target.txt", .{ .mode = .read_write });
 
@@ -55,17 +54,6 @@ fn modify_target_file(allocator: std.mem.Allocator) !void {
     const writer = line.writer();
     var result = ArrayList(u8).init(allocator);
     defer result.deinit();
-
-    const Entry = struct {
-        key: []const u8,
-        value: []const u8,
-    };
-    const entries = [_]Entry{
-        .{ .key = "TOOL_CHAIN_TAG", .value = "CLANGPDB" },
-        .{ .key = "TARGET", .value = "DEBUG" },
-        .{ .key = "TARGET_ARCH", .value = "X64" },
-        .{ .key = "ACTIVE_PLATFORM", .value = "ZakuroLoaderPkg/ZakuroLoaderPkg.dsc" },
-    };
 
     while (reader.streamUntilDelimiter(writer, '\n', null)) {
         defer line.clearRetainingCapacity();
@@ -90,7 +78,19 @@ fn create_symlink(original: []const u8, link: []const u8) !void {
     try edk2_dir.symLink(original, link, .{ .is_directory = true });
 }
 
-fn build_efi() !void {
+fn build_efi(allocator: std.mem.Allocator) !void {
+    const entries = [_]TargetEntry{
+        .{ .key = "TOOL_CHAIN_TAG", .value = "CLANGPDB" },
+        .{ .key = "TARGET", .value = "DEBUG" },
+        .{ .key = "TARGET_ARCH", .value = "X64" },
+        .{ .key = "ACTIVE_PLATFORM", .value = "ZakuroLoaderPkg/ZakuroLoaderPkg.dsc" },
+    };
+    modify_target_file(allocator, &entries) catch |err| {
+        log.err("Failed to modify target.txt.", .{});
+        log.err("{?}", .{err});
+        exit(1);
+    };
+
     const args = [_][]const u8{ "bash", "-c", "source edksetup.sh && build" };
     var child = std.process.Child.init(&args, std.heap.page_allocator);
     child.cwd = EDK2_DIRNAME;
@@ -128,6 +128,39 @@ fn make_base_tools(allocator: std.mem.Allocator) !void {
 
     if (term.Exited != 0) {
         return error.MakeFailed;
+    }
+}
+
+fn build_ovmf(allocator: std.mem.Allocator) !void {
+    const entries = [_]TargetEntry{
+        .{ .key = "TOOL_CHAIN_TAG", .value = "CLANGPDB" },
+        .{ .key = "TARGET", .value = "DEBUG" },
+        .{ .key = "TARGET_ARCH", .value = "X64" },
+        .{ .key = "ACTIVE_PLATFORM", .value = "OvmfPkg/OvmfPkgX64.dsc" },
+    };
+    modify_target_file(allocator, &entries) catch |err| {
+        log.err("Failed to modify target.txt.", .{});
+        log.err("{?}", .{err});
+        exit(1);
+    };
+
+    const args = [_][]const u8{ "bash", "-c", "source edksetup.sh && build" };
+    var child = std.process.Child.init(&args, std.heap.page_allocator);
+    child.cwd = EDK2_DIRNAME;
+    try child.spawn();
+    const term = try child.wait();
+
+    if (term.Exited != 0) {
+        return error.MakeFailed;
+    }
+
+    const build_dir = try fs.cwd().openDir("edk2/Build/OvmfX64/DEBUG_CLANGPDB/FV", .{});
+    const files_to_copy = [_][]const u8{
+        "OVMF_CODE.fd",
+        "OVMF_VARS.fd",
+    };
+    for (files_to_copy) |file| {
+        try build_dir.copyFile(file, fs.cwd(), file, .{});
     }
 }
 
@@ -171,15 +204,25 @@ pub fn main() !void {
         exit(1);
     };
 
-    log.info("Modifying target.txt.", .{});
-    modify_target_file(allocator) catch |err| {
-        log.err("Failed to modify target.txt.", .{});
-        log.err("{?}", .{err});
-        exit(1);
+    var ovmf_not_exist = false;
+    _ = fs.cwd().access("OVMF_CODE.fd", .{}) catch {
+        ovmf_not_exist = true;
     };
+    _ = fs.cwd().access("OVMF_VARS.fd", .{}) catch {
+        ovmf_not_exist = true;
+    };
+    if (ovmf_not_exist) {
+        log.info("Building OVMF.", .{});
+        build_ovmf(allocator) catch {
+            log.err("Failed to build OVMF.", .{});
+            exit(1);
+        };
+    } else {
+        log.info("OVMF already exists. Skipping build.", .{});
+    }
 
     log.info("Building EFI.", .{});
-    build_efi() catch {
+    build_efi(allocator) catch {
         log.err("Failed to build EFI.", .{});
         exit(1);
     };

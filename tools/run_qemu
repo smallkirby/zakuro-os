@@ -1,0 +1,27 @@
+#!/bin/bash
+
+set -eu
+
+if [ $# -lt 1 ]; then
+  echo "Usage: $0 <DISK> <EFI>"
+  exit 1
+fi
+
+SCRIPT_DIR=$(dirname "$0")
+DISK_IMG=$1
+EFI=$2
+
+OVMF_CODE=OVMF_CODE.fd
+OVMF_VARS=OVMF_VARS.fd
+
+"$SCRIPT_DIR"/create_img "$DISK_IMG" ./mnt "$EFI"
+
+touch "$OVMF_VARS"
+touch "$OVMF_CODE"
+
+qemu-system-x86_64 \
+  -m 512M \
+  -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
+  -drive if=pflash,format=raw,file="$OVMF_VARS" \
+  -drive if=ide,index=0,media=disk,format=raw,file="$DISK_IMG" \
+  -monitor stdio

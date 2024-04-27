@@ -4,3 +4,5 @@
 /edk2/ZakuroLoaderPkg
 
 /Loader.efi
+/disk.img
+/OVMF_*.fd
