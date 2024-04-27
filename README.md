@@ -11,3 +11,9 @@ All you need to do is:
 ```bash
 zig build
 ```
+
+To run the OS in QEMU:
+
+```bash
+zig build run
+```

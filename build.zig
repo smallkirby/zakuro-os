@@ -13,12 +13,6 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(exe);
 
-    const run_cmd = b.addRunArtifact(exe);
-    run_cmd.step.dependOn(b.getInstallStep());
-    if (b.args) |args| {
-        run_cmd.addArgs(args);
-    }
-
     // Dependency
     const chameleon = b.dependency("chameleon", .{});
     const string = b.dependency("string", .{});
@@ -55,9 +49,16 @@ pub fn build(b: *std.Build) void {
     exe.step.dependOn(run_build_efi_step);
     build_efi_cmd.step.dependOn(run_ensure_submodule_step);
 
-    // Run step (TODO)
-    const run_step = b.step("run", "Run the app");
-    run_step.dependOn(&run_cmd.step);
+    // Declare a run step to run QEMU.
+    const run_qemu_cmd = b.addSystemCommand(&.{
+        "tools/run_qemu",
+        "disk.img",
+        "Loader.efi",
+    });
+    run_qemu_cmd.step.dependOn(b.getInstallStep());
+
+    const run_step = b.step("run", "Run the kernel on QEMU");
+    run_step.dependOn(&run_qemu_cmd.step);
 
     // Test step
     const exe_unit_tests = b.addTest(.{
