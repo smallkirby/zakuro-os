@@ -4,7 +4,7 @@
 
 ## Development
 
-The zig build system is responsible for everything about building,
+The Zig build system is responsible for everything
 including the dependency installation and the build.
 All you need to do is:
 
