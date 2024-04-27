@@ -22,3 +22,4 @@ sudo cp "$EFI" "$MNT_POINT/EFI/BOOT/BOOTX64.EFI"
 
 sleep 0.5
 sudo umount "$MNT_POINT"
+rm -r "$MNT_POINT"

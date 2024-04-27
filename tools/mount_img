@@ -1,0 +1,14 @@
+#!/bin/bash
+
+set -eu
+
+if [ $# -ne 2 ]; then
+  DISK_NAME="disk.img"
+  MNT_POINT="mnt"
+else
+  DISK_NAME="$1"
+  MNT_POINT="$2"
+fi
+
+mkdir -p "$MNT_POINT"
+sudo mount -o loop "$DISK_NAME" "$MNT_POINT"
