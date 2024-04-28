@@ -1,7 +1,9 @@
 #include <Guid/FileInfo.h>
+#include <Library/MemoryAllocationLib.h>
 #include <Library/PrintLib.h>
 #include <Library/UefiBootServicesTableLib.h>
 #include <Library/UefiLib.h>
+#include <Protocol/BlockIo.h>
 #include <Protocol/BlockIo2.h>
 #include <Protocol/DiskIo.h>
 #include <Protocol/LoadedImage.h>
@@ -116,6 +118,40 @@ EFI_STATUS OpenRootDir(EFI_HANDLE image_handle, EFI_FILE_PROTOCOL **root) {
   return EFI_SUCCESS;
 }
 
+/// Open Graphics Output Protocol.
+EFI_STATUS OpenGOP(EFI_HANDLE image_handle,
+                   EFI_GRAPHICS_OUTPUT_PROTOCOL **gop) {
+  UINTN num_gop_handles = 0;
+  EFI_HANDLE *gop_handles = NULL;
+  gBS->LocateHandleBuffer(ByProtocol, &gEfiGraphicsOutputProtocolGuid, NULL,
+                          &num_gop_handles, &gop_handles);
+
+  gBS->OpenProtocol(gop_handles[0], &gEfiGraphicsOutputProtocolGuid,
+                    (VOID **)gop, image_handle, NULL,
+                    EFI_OPEN_PROTOCOL_BY_HANDLE_PROTOCOL);
+
+  FreePool(gop_handles);
+
+  return EFI_SUCCESS;
+}
+
+const CHAR16 *GetPixelFormatUnicode(EFI_GRAPHICS_PIXEL_FORMAT fmt) {
+  switch (fmt) {
+    case PixelRedGreenBlueReserved8BitPerColor:
+      return L"PixelRedGreenBlueReserved8BitPerColor";
+    case PixelBlueGreenRedReserved8BitPerColor:
+      return L"PixelBlueGreenRedReserved8BitPerColor";
+    case PixelBitMask:
+      return L"PixelBitMask";
+    case PixelBltOnly:
+      return L"PixelBltOnly";
+    case PixelFormatMax:
+      return L"PixelFormatMax";
+    default:
+      return L"InvalidPixelFormat";
+  }
+}
+
 EFI_STATUS EFIAPI UefiMain(EFI_HANDLE image_handle,
                            EFI_SYSTEM_TABLE *system_table) {
   Print(L"Hello, world...!\n");
@@ -144,6 +180,19 @@ EFI_STATUS EFIAPI UefiMain(EFI_HANDLE image_handle,
   memmap_file->Close(memmap_file);
 
   Print(L"Saved a memory map to \\memmap.\n");
+
+  // Open GOP
+  EFI_GRAPHICS_OUTPUT_PROTOCOL *gop;
+  OpenGOP(image_handle, &gop);
+  Print(L"Resolution: %ux%u, Pixel Format: %s, %u pixels/line\n",
+        gop->Mode->Info->HorizontalResolution,
+        gop->Mode->Info->VerticalResolution,
+        GetPixelFormatUnicode(gop->Mode->Info->PixelFormat),
+        gop->Mode->Info->PixelsPerScanLine);
+  Print(L"Frame Buffer: 0x%0lx - 0x%0lx, Size: %0lx bytes\n",
+        gop->Mode->FrameBufferBase,
+        gop->Mode->FrameBufferBase + gop->Mode->FrameBufferSize,
+        gop->Mode->FrameBufferSize);
 
   // Load kernel image
   EFI_FILE_PROTOCOL *kernel_file;
@@ -207,8 +256,9 @@ EFI_STATUS EFIAPI UefiMain(EFI_HANDLE image_handle,
     }
   }
 
-  typedef void EntryPointType(void);
-  ((EntryPointType *)entry_addr)();
+  typedef void EntryPointType(UINT64, UINT64);
+  ((EntryPointType *)entry_addr)(gop->Mode->FrameBufferBase,
+                                 gop->Mode->FrameBufferSize);
 
   // unreachable
 
