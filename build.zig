@@ -24,7 +24,6 @@ pub fn build(b: *std.Build) void {
 
     // Dependency
     const chameleon = b.dependency("chameleon", .{});
-    const string = b.dependency("string", .{});
 
     // Declare a tool to check for submodule updates and initialization.
     const ensure_submodule = b.addExecutable(.{
@@ -49,7 +48,6 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     build_efi.root_module.addImport("chameleon", chameleon.module("chameleon"));
-    build_efi.root_module.addImport("string", string.module("string"));
 
     const build_efi_cmd = b.addRunArtifact(build_efi);
     build_efi_cmd.step.dependOn(&build_efi.step);
