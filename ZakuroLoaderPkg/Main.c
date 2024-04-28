@@ -10,6 +10,8 @@
 #include <Protocol/SimpleFileSystem.h>
 #include <Uefi.h>
 
+#include "frame_buffer.hpp"
+
 /// Thin wrapper struct for UEFI memory map.
 struct MemoryMap {
   UINTN buffer_size;
@@ -20,6 +22,10 @@ struct MemoryMap {
   UINTN descriptor_size;
   UINT32 descriptor_version;
 };
+
+void Halt(void) {
+  while (1) __asm__("hlt");
+}
 
 /// Get UEFI memory map.
 EFI_STATUS GetMemoryMap(struct MemoryMap *map) {
@@ -200,8 +206,7 @@ EFI_STATUS EFIAPI UefiMain(EFI_HANDLE image_handle,
       root_dir, &kernel_file, L"\\kernel.elf", EFI_FILE_MODE_READ, 0);
   if (EFI_ERROR(kern_setup_status)) {
     Print(L"failed to open file: %r\n", kern_setup_status);
-    while (1)
-      ;
+    Halt();
   }
 
   UINTN file_info_size =
@@ -220,15 +225,13 @@ EFI_STATUS EFIAPI UefiMain(EFI_HANDLE image_handle,
                                          &kernel_base_addr);
   if (EFI_ERROR(kern_setup_status)) {
     Print(L"failed to allocate pages: %r\n", kern_setup_status);
-    while (1)
-      ;
+    Halt();
   }
   kern_setup_status = kernel_file->Read(kernel_file, &kernel_file_size,
                                         (VOID *)kernel_base_addr);
   if (EFI_ERROR(kern_setup_status)) {
     Print(L"failed to read file: %r\n", kern_setup_status);
-    while (1)
-      ;
+    Halt();
   }
   Print(L"Kernel: 0x%0lx (%lx bytes)\n", kernel_base_addr, kernel_file_size);
 
@@ -245,26 +248,39 @@ EFI_STATUS EFIAPI UefiMain(EFI_HANDLE image_handle,
     status = GetMemoryMap(&memmap);
     if (EFI_ERROR(status)) {
       Print(L"Failed to get memory map: %r\n", status);
-      while (1)
-        ;
+      Halt();
     }
     status = gBS->ExitBootServices(image_handle, memmap.map_key);
     if (EFI_ERROR(status)) {
       Print(L"Could not exit boot service: %r\n", status);
-      while (1)
-        ;
+      Halt();
     }
   }
 
-  typedef void EntryPointType(UINT64, UINT64);
-  ((EntryPointType *)entry_addr)(gop->Mode->FrameBufferBase,
-                                 gop->Mode->FrameBufferSize);
+  // prepare framebuffer config for argument of kernel entry point
+  struct FrameBufferConfig config = {(UINT8 *)gop->Mode->FrameBufferBase,
+                                     gop->Mode->Info->PixelsPerScanLine,
+                                     gop->Mode->Info->HorizontalResolution,
+                                     gop->Mode->Info->VerticalResolution, 0};
+  switch (gop->Mode->Info->PixelFormat) {
+    case PixelRedGreenBlueReserved8BitPerColor:
+      config.pixel_format = kPixelRGBResv8BitPerColor;
+      break;
+    case PixelBlueGreenRedReserved8BitPerColor:
+      config.pixel_format = kPixelBGRResv8BitPerColor;
+      break;
+    default:
+      Print(L"Unimplemented pixel format: %d\n", gop->Mode->Info->PixelFormat);
+      Halt();
+  }
+
+  typedef void EntryPointType(const struct FrameBufferConfig *);
+  ((EntryPointType *)entry_addr)(&config);
 
   // unreachable
 
   Print(L"If you see this message, something went wrong!\n");
-  while (1)
-    ;
+  Halt();
 
   return EFI_SUCCESS;
 }
