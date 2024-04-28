@@ -2,14 +2,15 @@
 
 set -eu
 
-if [ $# -lt 3 ]; then
-  echo "Usage: $0 <image name> <mount point> <EFI>"
+if [ $# -lt 4 ]; then
+  echo "Usage: $0 <image name> <mount point> <EFI> <kernel>"
   exit 1
 fi
 
 DISK_NAME=$1
 MNT_POINT=$2
 EFI=$3
+KERNEL=$4
 
 rm -f "$DISK_NAME"
 qemu-img create -f raw "$DISK_NAME" 200M
@@ -19,6 +20,7 @@ mkdir -p "$MNT_POINT"
 sudo mount -o loop "$DISK_NAME" "$MNT_POINT"
 sudo mkdir -p "$MNT_POINT/EFI/BOOT"
 sudo cp "$EFI" "$MNT_POINT/EFI/BOOT/BOOTX64.EFI"
+sudo cp "$KERNEL" "$MNT_POINT/"
 
 sleep 0.5
 sudo umount "$MNT_POINT"

@@ -2,19 +2,20 @@
 
 set -eu
 
-if [ $# -lt 1 ]; then
-  echo "Usage: $0 <DISK> <EFI>"
+if [ $# -ne 3 ]; then
+  echo "Usage: $0 <DISK> <EFI> <KERNEL>"
   exit 1
 fi
 
 SCRIPT_DIR=$(dirname "$0")
 DISK_IMG=$1
 EFI=$2
+KERNEL=$3
 
 OVMF_CODE=OVMF_CODE.fd
 OVMF_VARS=OVMF_VARS.fd
 
-"$SCRIPT_DIR"/create_img "$DISK_IMG" ./mnt "$EFI"
+"$SCRIPT_DIR"/create_img "$DISK_IMG" ./mnt "$EFI" "$KERNEL"
 
 touch "$OVMF_VARS"
 touch "$OVMF_CODE"
@@ -24,4 +25,5 @@ qemu-system-x86_64 \
   -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
   -drive if=pflash,format=raw,file="$OVMF_VARS" \
   -drive if=ide,index=0,media=disk,format=raw,file="$DISK_IMG" \
-  -monitor stdio
+  -monitor stdio \
+  -s

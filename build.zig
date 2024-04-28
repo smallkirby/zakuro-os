@@ -6,11 +6,20 @@ pub fn build(b: *std.Build) void {
 
     // Main binary (TODO).
     const exe = b.addExecutable(.{
-        .name = "zakuro-os",
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
+        .name = "kernel.elf",
+        .root_source_file = b.path("kernel/main.zig"),
+        .target = b.resolveTargetQuery(.{
+            .cpu_arch = .x86_64,
+            .os_tag = .freestanding,
+            .ofmt = .elf,
+        }),
+        .optimize = .Debug,
+        .linkage = .static,
     });
+    exe.root_module.red_zone = false;
+    exe.image_base = 0x10_0000;
+    exe.link_z_relro = false;
+    exe.entry = .{ .symbol_name = "kernel_main" };
     b.installArtifact(exe);
 
     // Dependency
@@ -50,10 +59,20 @@ pub fn build(b: *std.Build) void {
     build_efi_cmd.step.dependOn(run_ensure_submodule_step);
 
     // Declare a run step to run QEMU.
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
     const run_qemu_cmd = b.addSystemCommand(&.{
         "tools/run_qemu",
         "disk.img",
         "Loader.efi",
+        std.fs.path.join(allocator, &.{
+            b.install_path,
+            "bin",
+            exe.out_filename,
+        }) catch {
+            @panic("Failed to join path");
+        },
     });
     run_qemu_cmd.step.dependOn(b.getInstallStep());
 

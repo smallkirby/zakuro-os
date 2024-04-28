@@ -1,3 +1,4 @@
+#include <Guid/FileInfo.h>
 #include <Library/PrintLib.h>
 #include <Library/UefiBootServicesTableLib.h>
 #include <Library/UefiLib.h>
@@ -119,6 +120,7 @@ EFI_STATUS EFIAPI UefiMain(EFI_HANDLE image_handle,
                            EFI_SYSTEM_TABLE *system_table) {
   Print(L"Hello, world...!\n");
 
+  // Save memory map
   CHAR8 memory_buf[4096 * 4];
   struct MemoryMap memmap = {
       .buffer_size = sizeof(memory_buf),
@@ -143,6 +145,74 @@ EFI_STATUS EFIAPI UefiMain(EFI_HANDLE image_handle,
 
   Print(L"Saved a memory map to \\memmap.\n");
 
+  // Load kernel image
+  EFI_FILE_PROTOCOL *kernel_file;
+  EFI_STATUS kern_setup_status = root_dir->Open(
+      root_dir, &kernel_file, L"\\kernel.elf", EFI_FILE_MODE_READ, 0);
+  if (EFI_ERROR(kern_setup_status)) {
+    Print(L"failed to open file: %r\n", kern_setup_status);
+    while (1)
+      ;
+  }
+
+  UINTN file_info_size =
+      sizeof(EFI_FILE_INFO) +
+      sizeof(CHAR16) * 12;  // additional length for file name
+  UINT8 file_info_buffer[file_info_size];
+  kernel_file->GetInfo(kernel_file, &gEfiFileInfoGuid, &file_info_size,
+                       file_info_buffer);
+
+  EFI_FILE_INFO *file_info = (EFI_FILE_INFO *)file_info_buffer;
+  UINTN kernel_file_size = file_info->FileSize;
+
+  EFI_PHYSICAL_ADDRESS kernel_base_addr = 0x100000;
+  kern_setup_status = gBS->AllocatePages(AllocateAddress, EfiLoaderData,
+                                         (kernel_file_size + 0xfff) / 0x1000,
+                                         &kernel_base_addr);
+  if (EFI_ERROR(kern_setup_status)) {
+    Print(L"failed to allocate pages: %r\n", kern_setup_status);
+    while (1)
+      ;
+  }
+  kern_setup_status = kernel_file->Read(kernel_file, &kernel_file_size,
+                                        (VOID *)kernel_base_addr);
+  if (EFI_ERROR(kern_setup_status)) {
+    Print(L"failed to read file: %r\n", kern_setup_status);
+    while (1)
+      ;
+  }
+  Print(L"Kernel: 0x%0lx (%lx bytes)\n", kernel_base_addr, kernel_file_size);
+
+#define ELF_OFFSET_TO_ENTRYPOINT 24
+  UINT64 entry_addr = *(UINT64 *)(kernel_base_addr + ELF_OFFSET_TO_ENTRYPOINT);
+  entry_addr -= 0x1000;  // TODO: must read program headers
+  Print(L"Kernel entry point: 0x%lx\n", entry_addr);
+
+  EFI_STATUS status;
+  status = gBS->ExitBootServices(image_handle, memmap.map_key);
+  if (EFI_ERROR(status)) {
+    // ExitBootServices() may fail if the memory map has been changed.
+    // Retry GetMemoryMap() and ExitBootServices() here.
+    status = GetMemoryMap(&memmap);
+    if (EFI_ERROR(status)) {
+      Print(L"Failed to get memory map: %r\n", status);
+      while (1)
+        ;
+    }
+    status = gBS->ExitBootServices(image_handle, memmap.map_key);
+    if (EFI_ERROR(status)) {
+      Print(L"Could not exit boot service: %r\n", status);
+      while (1)
+        ;
+    }
+  }
+
+  typedef void EntryPointType(void);
+  ((EntryPointType *)entry_addr)();
+
+  // unreachable
+
+  Print(L"If you see this message, something went wrong!\n");
   while (1)
     ;
 
