@@ -4,6 +4,7 @@
 ![EDK2 CLANGPDB](https://shields.io/badge/EDK2_CLANGPDB-Tested_on_clang--17-blue?logo=llvm&color=262D3A&style=for-the-badge)
 
 ![Lint](https://github.com/smallkirby/zakuro-os/actions/workflows/lint.yml/badge.svg)
+![Build](https://github.com/smallkirby/zakuro-os/actions/workflows/build.yml/badge.svg)
 
 Zig port of x64 [MikanOS](https://github.com/uchan-nos/mikanos): an experimental, educational, and toy OS.
 

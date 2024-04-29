@@ -1,0 +1,50 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+env:
+  ZIG_VERSION: 0.12.0
+  LLVM_VERSION: 17
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: "recursive"
+
+      - name: Install dependency
+        run: |
+          wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+          sudo apt update
+          sudo apt install -y \
+            git sudo gcc g++ make cmake curl wget vim clang-${{env.LLVM_VERSION}} lld-${{env.LLVM_VERSION}} \
+            autoconf uuid-dev nasm iasl xz-utils
+
+      - name: Install zig
+        run: |
+          curl https://ziglang.org/download/${{env.ZIG_VERSION}}/zig-linux-x86_64-${{env.ZIG_VERSION}}.tar.xz -L -o zig.tar.xz
+          tar -xf zig.tar.xz
+          echo "$(pwd)/zig-linux-x86_64-${{env.ZIG_VERSION}}" >> $GITHUB_PATH
+
+      - name: Update alternatives
+        run: |
+          update-alternatives --install /usr/bin/clang clang /usr/bin/clang-17 100
+          update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-17 100
+          update-alternatives --install /usr/bin/llvm-config llvm-config /usr/bin/llvm-config-17 100
+          update-alternatives --install /usr/bin/llvm-lib llvm-lib /usr/bin/llvm-lib-17 100
+          update-alternatives --install /usr/bin/llvm-link llvm-link /usr/bin/llvm-link-17 100
+          update-alternatives --install /usr/bin/llvm-ar llvm-ar /usr/bin/llvm-ar-17 100
+          update-alternatives --install /usr/bin/llvm-rc llvm-rc /usr/bin/llvm-rc-17 100
+          update-alternatives --install /usr/bin/lld-link lld-link /usr/bin/lld-link-17 100
+
+      - name: Build
+        run: |
+          zig build
