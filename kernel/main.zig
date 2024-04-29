@@ -6,9 +6,10 @@ const fb = @import("frame_buffer.zig");
 /// The bootloader is a UEFI app using MS x64 calling convention,
 /// so we need to use the same calling convention here.
 export fn kernel_main(fb_config: *fb.FrameBufferConfig) callconv(.Win64) noreturn {
+    const pixel_writer = fb.PixelWriter.new(fb_config);
     for (0..fb_config.horizontal_resolution) |x| {
         for (0..fb_config.vertical_resolution) |y| {
-            fb.write_pixel(fb_config, @truncate(x), @truncate(y), .{
+            pixel_writer.write_pixel(@truncate(x), @truncate(y), .{
                 .red = 0xFF,
                 .green = 0xFF,
                 .blue = 0xFF,
@@ -18,8 +19,7 @@ export fn kernel_main(fb_config: *fb.FrameBufferConfig) callconv(.Win64) noretur
 
     for (0..200) |x| {
         for (0..200) |y| {
-            fb.write_pixel(
-                fb_config,
+            pixel_writer.write_pixel(
                 @truncate(x + 100),
                 @truncate(y + 100),
                 .{
