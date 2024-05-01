@@ -1,6 +1,7 @@
 //! Kernel entry point.
 
 const graphics = @import("graphics.zig");
+const std = @import("std");
 
 /// Kernel entry point called from the bootloader.
 /// The bootloader is a UEFI app using MS x64 calling convention,
@@ -31,14 +32,19 @@ export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) n
         }
     }
 
-    for ("Hello, Zakuro OS!", 0..) |c, i| {
-        const x = 50 + @as(u32, @truncate(i * 8));
-        try pixel_writer.write_ascii(x, 50, c, .{
-            .red = 0xFF,
-            .green = 0x00,
-            .blue = 0x00,
-        });
-    }
+    var buf: [256:0]u8 = undefined;
+    const l = std.fmt.bufPrint(&buf, "{d} + {d} = {d}\n", .{ 1, 2, 1 + 2 }) catch unreachable;
+    try pixel_writer.write_string(50, 30, l, .{
+        .red = 0x00,
+        .green = 0xFF,
+        .blue = 0x00,
+    });
+
+    try pixel_writer.write_string(50, 50, "Hello, Zakuro OS!", .{
+        .red = 0xFF,
+        .green = 0x00,
+        .blue = 0x00,
+    });
 
     while (true) {
         asm volatile ("hlt");
