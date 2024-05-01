@@ -60,5 +60,5 @@ pub fn main() !void {
         log.info("Submodule EDK2 initialized.", .{});
     };
 
-    log.info("Submodule EDK2 is conformed installed.", .{});
+    log.info("Submodule EDK2 is confirmed to be installed.", .{});
 }
