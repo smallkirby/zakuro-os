@@ -41,6 +41,7 @@ pub const PixelWriter = struct {
         };
     }
 
+    /// Write an ASCII character to the specified position.
     pub fn write_ascii(self: Self, x: u32, y: u32, c: u8, color: PixelColor) !void {
         const fonts = font.get_font(c).?;
         for (0..font.FONT_HEIGHT) |dy| {
