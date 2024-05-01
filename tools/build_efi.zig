@@ -94,6 +94,8 @@ fn build_efi(allocator: std.mem.Allocator) !void {
     const args = [_][]const u8{ "bash", "-c", "source edksetup.sh && build" };
     var child = std.process.Child.init(&args, std.heap.page_allocator);
     child.cwd = EDK2_DIRNAME;
+    child.stdout_behavior = .Ignore;
+
     try child.spawn();
     const term = try child.wait();
 
@@ -106,6 +108,8 @@ fn source_edksetup(allocator: std.mem.Allocator) !void {
     const args = [_][]const u8{ "bash", "-c", "source edksetup.sh" };
     var child = std.process.Child.init(&args, allocator);
     child.cwd = EDK2_DIRNAME;
+    child.stdout_behavior = .Ignore;
+
     try child.spawn();
     const term = try child.wait();
 
@@ -123,6 +127,8 @@ fn make_base_tools(allocator: std.mem.Allocator) !void {
     });
     const args = [_][]const u8{ "make", "-C", source_path };
     var child = std.process.Child.init(&args, allocator);
+    child.stdout_behavior = .Ignore;
+
     try child.spawn();
     const term = try child.wait();
 
@@ -147,6 +153,8 @@ fn build_ovmf(allocator: std.mem.Allocator) !void {
     const args = [_][]const u8{ "bash", "-c", "source edksetup.sh && build" };
     var child = std.process.Child.init(&args, std.heap.page_allocator);
     child.cwd = EDK2_DIRNAME;
+    child.stdout_behavior = .Ignore;
+
     try child.spawn();
     const term = try child.wait();
 
@@ -192,7 +200,7 @@ pub fn main() !void {
         };
     };
 
-    log.info("Building BaseTools.", .{});
+    log.info("Building EDK2 BaseTools.", .{});
     make_base_tools(allocator) catch {
         log.err("Failed to build BaseTools.", .{});
         exit(1);
