@@ -1,12 +1,12 @@
 //! Kernel entry point.
 
-const fb = @import("frame_buffer.zig");
+const graphics = @import("graphics.zig");
 
 /// Kernel entry point called from the bootloader.
 /// The bootloader is a UEFI app using MS x64 calling convention,
 /// so we need to use the same calling convention here.
-export fn kernel_main(fb_config: *fb.FrameBufferConfig) callconv(.Win64) noreturn {
-    const pixel_writer = fb.PixelWriter.new(fb_config);
+export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) noreturn {
+    const pixel_writer = graphics.PixelWriter.new(fb_config);
     for (0..fb_config.horizontal_resolution) |x| {
         for (0..fb_config.vertical_resolution) |y| {
             pixel_writer.write_pixel(@truncate(x), @truncate(y), .{
@@ -29,6 +29,15 @@ export fn kernel_main(fb_config: *fb.FrameBufferConfig) callconv(.Win64) noretur
                 },
             );
         }
+    }
+
+    for ("Hello, Zakuro OS!", 0..) |c, i| {
+        const x = 50 + @as(u32, @truncate(i * 8));
+        try pixel_writer.write_ascii(x, 50, c, .{
+            .red = 0xFF,
+            .green = 0x00,
+            .blue = 0x00,
+        });
     }
 
     while (true) {

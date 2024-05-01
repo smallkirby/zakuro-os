@@ -6,3 +6,7 @@
 /Loader.efi
 /disk.img
 /OVMF_*.fd
+
+font.o
+font.tmp.bin
+fontdata

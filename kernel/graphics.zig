@@ -1,4 +1,6 @@
-//! This module provides definitions of framebuffer structures.
+//! This module provides the functionality of graphics output.
+
+const font = @import("font.zig");
 
 /// Pixel data format defined by UEFI.
 pub const PixelFormat = enum(u8) {
@@ -37,6 +39,19 @@ pub const PixelWriter = struct {
                 .PixelBGRResv8BitPerColor => &write_pixel_bgr,
             },
         };
+    }
+
+    pub fn write_ascii(self: Self, x: u32, y: u32, c: u8, color: PixelColor) !void {
+        const fonts = font.get_font(c).?;
+        for (0..font.FONT_HEIGHT) |dy| {
+            for (0..font.FONT_WIDTH) |dx| {
+                if ((fonts[dy] << @truncate(dx)) & 0x80 != 0) {
+                    const px = @as(u32, @truncate(dx)) + x;
+                    const py = @as(u32, @truncate(dy)) + y;
+                    self.write_pixel(px, py, color);
+                }
+            }
+        }
     }
 
     /// Write a pixel color to the specified position.

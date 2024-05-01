@@ -4,7 +4,70 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    // Main binary (TODO).
+    // Dependency
+    const chameleon = b.dependency("chameleon", .{});
+    const clap = b.dependency("clap", .{});
+
+    // Declare a tool to check for submodule updates and initialization.
+    const ensure_submodule = b.addExecutable(.{
+        .name = "ensure_submodule",
+        .root_source_file = b.path("tools/ensure_submodule.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    ensure_submodule.root_module.addImport("chameleon", chameleon.module("chameleon"));
+
+    const ensure_submodule_cmd = b.addRunArtifact(ensure_submodule);
+    ensure_submodule_cmd.step.dependOn(&ensure_submodule.step);
+    const run_ensure_submodule_step = b.step("ensure_submodule", "Ensure submodule is up-to-date");
+    run_ensure_submodule_step.dependOn(&ensure_submodule_cmd.step);
+    b.getInstallStep().dependOn(run_ensure_submodule_step);
+
+    // Declare a tool to generate a font binary.
+    const makefont = b.addExecutable(.{
+        .name = "makefont",
+        .root_source_file = b.path("tools/fonts/makefont.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    makefont.root_module.addImport("clap", clap.module("clap"));
+    b.installArtifact(makefont);
+
+    const makefont_cmd = b.addRunArtifact(makefont);
+    makefont_cmd.addArg("--input");
+    makefont_cmd.addFileArg(.{ .path = "./tools/fonts/half.txt" });
+    makefont_cmd.addArg("--output");
+    const makefont_output = makefont_cmd.addOutputFileArg("font.o");
+    makefont_cmd.step.dependOn(&makefont.step);
+    const run_makefont_step = b.step("makefont", "Generate a font binary");
+    run_makefont_step.dependOn(&makefont_cmd.step);
+    const f = b.addInstallFileWithDir(makefont_output, .prefix, "font.o");
+    b.getInstallStep().dependOn(&f.step);
+
+    // Declare a tool to build EFI using EDK2.
+    const build_efi = b.addExecutable(.{
+        .name = "build_efi",
+        .root_source_file = b.path("tools/build_efi.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    build_efi.root_module.addImport("chameleon", chameleon.module("chameleon"));
+
+    const build_efi_cmd = b.addRunArtifact(build_efi);
+    build_efi_cmd.step.dependOn(&build_efi.step);
+    const run_build_efi_step = b.step("build_efi", "Build EFI using EDK2");
+    run_build_efi_step.dependOn(&build_efi_cmd.step);
+    b.getInstallStep().dependOn(run_build_efi_step);
+    build_efi_cmd.step.dependOn(run_ensure_submodule_step);
+
+    // Declare a run step to run C linter.
+    const run_clint_cmd = b.addSystemCommand(&.{
+        "tools/lint_c",
+    });
+    const run_clint_step = b.step("lint_c", "Run C linter");
+    run_clint_step.dependOn(&run_clint_cmd.step);
+
+    // Main binary
     const exe = b.addExecutable(.{
         .name = "kernel.elf",
         .root_source_file = b.path("kernel/main.zig"),
@@ -20,41 +83,8 @@ pub fn build(b: *std.Build) void {
     exe.image_base = 0x10_0000;
     exe.link_z_relro = false;
     exe.entry = .{ .symbol_name = "kernel_main" };
+    exe.addObjectFile(makefont_output);
     b.installArtifact(exe);
-
-    // Dependency
-    const chameleon = b.dependency("chameleon", .{});
-
-    // Declare a tool to check for submodule updates and initialization.
-    const ensure_submodule = b.addExecutable(.{
-        .name = "ensure_submodule",
-        .root_source_file = b.path("tools/ensure_submodule.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    ensure_submodule.root_module.addImport("chameleon", chameleon.module("chameleon"));
-
-    const ensure_submodule_cmd = b.addRunArtifact(ensure_submodule);
-    ensure_submodule_cmd.step.dependOn(&ensure_submodule.step);
-    const run_ensure_submodule_step = b.step("ensure_submodule", "Ensure submodule is up-to-date");
-    run_ensure_submodule_step.dependOn(&ensure_submodule_cmd.step);
-    exe.step.dependOn(run_ensure_submodule_step);
-
-    // Declare a tool to build EFI using EDK2.
-    const build_efi = b.addExecutable(.{
-        .name = "build_efi",
-        .root_source_file = b.path("tools/build_efi.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    build_efi.root_module.addImport("chameleon", chameleon.module("chameleon"));
-
-    const build_efi_cmd = b.addRunArtifact(build_efi);
-    build_efi_cmd.step.dependOn(&build_efi.step);
-    const run_build_efi_step = b.step("build_efi", "Build EFI using EDK2");
-    run_build_efi_step.dependOn(&build_efi_cmd.step);
-    exe.step.dependOn(run_build_efi_step);
-    build_efi_cmd.step.dependOn(run_ensure_submodule_step);
 
     // Declare a run step to run QEMU.
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -76,13 +106,6 @@ pub fn build(b: *std.Build) void {
 
     const run_step = b.step("run", "Run the kernel on QEMU");
     run_step.dependOn(&run_qemu_cmd.step);
-
-    // Declare a run step to run C linter.
-    const run_clint_cmd = b.addSystemCommand(&.{
-        "tools/lint_c",
-    });
-    const run_clint_step = b.step("lint_c", "Run C linter");
-    run_clint_step.dependOn(&run_clint_cmd.step);
 
     // Test step
     const exe_unit_tests = b.addTest(.{
