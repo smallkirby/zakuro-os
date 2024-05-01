@@ -3,7 +3,7 @@
 const std = @import("std");
 const ArrayList = std.ArrayList;
 const log = std.log;
-const plog = @import("plog.zig");
+const plog = @import("plog");
 
 const EDK2_DIRNAME = "edk2";
 

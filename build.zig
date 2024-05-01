@@ -7,6 +7,12 @@ pub fn build(b: *std.Build) void {
     // Dependency
     const chameleon = b.dependency("chameleon", .{});
     const clap = b.dependency("clap", .{});
+    const plog = b.addModule("plog", .{
+        .root_source_file = b.path("tools/mod/plog.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    plog.addImport("chameleon", chameleon.module("chameleon"));
 
     // A tool to check if submodules are properly initialized.
     var run_ensure_submodule_step: *std.Build.Step = undefined;
@@ -17,7 +23,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
-        ensure_submodule.root_module.addImport("chameleon", chameleon.module("chameleon"));
+        ensure_submodule.root_module.addImport("plog", plog);
 
         const ensure_submodule_artifact = b.addRunArtifact(ensure_submodule);
         ensure_submodule_artifact.step.dependOn(&ensure_submodule.step);
@@ -36,6 +42,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         });
         makefont.root_module.addImport("clap", clap.module("clap"));
+        makefont.root_module.addImport("plog", plog);
 
         const makefont_artifact = b.addRunArtifact(makefont);
         makefont_artifact.addArg("--input");
@@ -58,7 +65,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
-        build_efi.root_module.addImport("chameleon", chameleon.module("chameleon"));
+        build_efi.root_module.addImport("plog", plog);
 
         const build_efi_artifact = b.addRunArtifact(build_efi);
         build_efi_artifact.step.dependOn(&build_efi.step);

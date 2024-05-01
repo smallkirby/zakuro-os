@@ -3,7 +3,7 @@
 const std = @import("std");
 const ArrayList = std.ArrayList;
 const log = std.log;
-const plog = @import("plog.zig");
+const plog = @import("plog");
 const fs = std.fs;
 const exit = std.process.exit;
 

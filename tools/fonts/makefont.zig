@@ -10,10 +10,18 @@ const os = std.os;
 const fs = std.fs;
 const clap = @import("clap");
 const ArrayList = std.ArrayList;
+const plog = @import("plog");
+const log = std.log;
 
+pub const std_options = std.Options{
+    .log_level = .info, // Edit here to change log level
+    .logFn = plog.logFunc,
+};
+
+/// Parse a 1x8 ASCII font line into a byte.
 fn compile_line(line: []const u8) u8 {
     if (line.len != 8) {
-        std.log.err("Invalid line length: {d}: {s}\n", .{ line.len, line });
+        log.err("Invalid line length: {d}: {s}\n", .{ line.len, line });
         @panic("Invalid line length");
     }
 
@@ -24,7 +32,7 @@ fn compile_line(line: []const u8) u8 {
             '.' => {},
             '@' => result |= @as(u8, 1) << @truncate(7 - i),
             else => {
-                std.log.err("Invalid character: '{c}': {s}", .{ c, line });
+                log.err("Invalid character: '{c}': {s}", .{ c, line });
                 @panic("Invalid character");
             },
         }
@@ -33,6 +41,7 @@ fn compile_line(line: []const u8) u8 {
     return result;
 }
 
+/// Compile a text file containing ASCII font data into a binary data.
 fn compile(allocator: std.mem.Allocator, in_path: []const u8) ![]u8 {
     const file = try fs.cwd().openFile(in_path, .{});
     defer file.close();
@@ -60,6 +69,7 @@ fn compile(allocator: std.mem.Allocator, in_path: []const u8) ![]u8 {
     return result.toOwnedSlice();
 }
 
+/// Output a binary data to a file.
 fn output2file(path: []const u8, data: []u8) !void {
     const file = try fs.cwd().createFile(path, .{});
     const writer = file.writer();
@@ -67,8 +77,8 @@ fn output2file(path: []const u8, data: []u8) !void {
 }
 
 // TODO: Zig's drop-in objcopy is insufficient?
+/// Convert a binary file into an ELF file using `objcopy` command.
 fn objcopy(in_path: []const u8, out_path: []const u8, allocator: std.mem.Allocator) !void {
-    std.log.info("in_path: {s}, out_path: {s}\n", .{ in_path, out_path });
     const in_path_abs = try fs.cwd().realpathAlloc(allocator, in_path);
     const out_path_abs = try fs.path.resolve(allocator, &.{out_path});
     const in_path_dir = fs.path.dirname(in_path_abs).?;
@@ -104,7 +114,7 @@ fn objcopy(in_path: []const u8, out_path: []const u8, allocator: std.mem.Allocat
     child.collectOutput(&stdout, &stderr, 1024) catch |err| switch (err) {
         error.StdoutStreamTooLong => {},
         else => {
-            std.log.err("Failed to collect output: {}", .{err});
+            log.err("Failed to collect output: {}", .{err});
         },
     };
     const term = try child.wait();
@@ -135,30 +145,34 @@ pub fn main() !void {
     };
     defer res.deinit();
 
-    // parse cmdline arguments
     if (res.args.help != 0) {
         return clap.help(std.io.getStdErr().writer(), clap.Help, &params, .{});
     }
 
+    // check if the output and input file paths are specified
     var out_path: []const u8 = undefined;
     var in_path: []const u8 = undefined;
     if (res.args.output) |output| {
         out_path = output;
     } else {
-        std.debug.print("Output file path is not specified.\n", .{});
+        log.err("Output file path is not specified.", .{});
         std.process.exit(1);
     }
     if (res.args.input) |input| {
         in_path = input;
     } else {
-        std.debug.print("Input font file path is not specified.\n", .{});
+        log.err("Input font file path is not specified.", .{});
         std.process.exit(1);
     }
 
+    log.info("Compiling font data from {s} to {s}", .{ in_path, out_path });
     const bin = try compile(allocator, in_path);
     defer allocator.free(bin);
     const tmp_out_path = "fontdata";
 
+    log.info("Outputting font data to {s}", .{tmp_out_path});
     try output2file(tmp_out_path, bin);
+
+    log.info("Converting binary data to ELF file {s}", .{out_path});
     try objcopy(tmp_out_path, out_path, allocator);
 }
