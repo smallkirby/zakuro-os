@@ -1,12 +1,16 @@
 //! Kernel entry point.
 
 const graphics = @import("graphics.zig");
+const ser = @import("serial.zig");
 const std = @import("std");
 
 /// Kernel entry point called from the bootloader.
 /// The bootloader is a UEFI app using MS x64 calling convention,
 /// so we need to use the same calling convention here.
 export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) noreturn {
+    const serial = ser.init();
+    serial.write_string("Booting Zakuro OS...\n");
+
     const pixel_writer = graphics.PixelWriter.new(fb_config);
     for (0..fb_config.horizontal_resolution) |x| {
         for (0..fb_config.vertical_resolution) |y| {

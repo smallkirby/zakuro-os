@@ -25,5 +25,5 @@ qemu-system-x86_64 \
   -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
   -drive if=pflash,format=raw,file="$OVMF_VARS" \
   -drive if=ide,index=0,media=disk,format=raw,file="$DISK_IMG" \
-  -monitor stdio \
+  -serial mon:stdio \
   -s
