@@ -26,9 +26,19 @@ pub const Serial = struct {
 };
 
 /// Initialize the serial console.
+/// You MUST call this function before using the serial console.
 pub fn init() Serial {
     var serial = Serial{};
     arch.serial.init_serial(&serial, .COM1, 9600);
+
+    return serial;
+}
+
+/// Get the serial console.
+/// You MUST call `init` before calling this function.
+pub fn get() Serial {
+    var serial = Serial{};
+    arch.serial.get_serial(&serial, .COM1);
 
     return serial;
 }

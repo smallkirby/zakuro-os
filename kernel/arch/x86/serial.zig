@@ -66,6 +66,12 @@ pub fn init_serial(serial: *Serial, port: Ports, baud: u32) void {
     am.outb(@truncate((divisor >> 8) & 0xFF), p + UartOffset.DLM);
     am.outb(c & 0b0111_1111, p + UartOffset.LCR); // Disable DLAB
 
+    get_serial(serial, port);
+}
+
+/// Get a serial console, then set a write-function to `Serial.write_fn`.
+/// You MUST ensure that the console of the `port` is initialized before calling this function.
+pub fn get_serial(serial: *Serial, port: Ports) void {
     serial._write_fn = switch (port) {
         Ports.COM1 => write_byte_com1,
         Ports.COM2 => write_byte_com2,
