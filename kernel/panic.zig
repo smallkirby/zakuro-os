@@ -4,7 +4,7 @@
 //! Therefore, we implement a simple panic handler here.
 
 const builtin = @import("std").builtin;
-const log = @import("log.zig");
+const log = @import("std").log.scoped(.panic);
 
 /// Implementation of the panic function.
 pub const panic_fn = panic;
@@ -18,12 +18,6 @@ fn panic(
     _ = error_return_trace;
     _ = ret_addr;
 
-    log.err(
-        \\
-        \\!!!!!!!!!!!!!
-        \\!!! PANIC !!!
-        \\!!!!!!!!!!!!!
-    , .{});
     log.err("{s}\n", .{msg});
 
     while (true) {

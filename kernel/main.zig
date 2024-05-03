@@ -3,17 +3,21 @@
 const graphics = @import("graphics.zig");
 const ser = @import("serial.zig");
 const std = @import("std");
-const log = @import("log.zig");
-const panic_fn = @import("panic.zig").panic_fn;
+const klog = @import("log.zig");
+const log = std.log.scoped(.main);
 
-pub const panic = panic_fn;
+/// Override panic impl
+pub const panic = @import("panic.zig").panic_fn;
+/// Override log impl
+pub const std_options = klog.default_log_options;
 
 /// Kernel entry point called from the bootloader.
 /// The bootloader is a UEFI app using MS x64 calling convention,
 /// so we need to use the same calling convention here.
 export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) noreturn {
     const serial = ser.init();
-    log.init(serial);
+    klog.init(serial);
+
     log.info("Booting Zakuro OS...", .{});
 
     const pixel_writer = graphics.PixelWriter.new(fb_config);
@@ -55,6 +59,7 @@ export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) n
         .blue = 0x00,
     });
 
+    log.info("Reached end of kernel. Halting...", .{});
     while (true) {
         asm volatile ("hlt");
     }
