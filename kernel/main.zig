@@ -14,7 +14,7 @@ pub const panic = panic_fn;
 export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) noreturn {
     const serial = ser.init();
     log.init(serial);
-    log.info("Booting Zakuro OS...");
+    log.info("Booting Zakuro OS...", .{});
 
     const pixel_writer = graphics.PixelWriter.new(fb_config);
     for (0..fb_config.horizontal_resolution) |x| {

@@ -18,11 +18,13 @@ fn panic(
     _ = error_return_trace;
     _ = ret_addr;
 
-    log.err("!!!!!!!!!!!!!");
-    log.err("!!! PANIC !!!");
-    log.err("!!!!!!!!!!!!!");
-    log.err(msg);
-    log.err("");
+    log.err(
+        \\
+        \\!!!!!!!!!!!!!
+        \\!!! PANIC !!!
+        \\!!!!!!!!!!!!!
+    , .{});
+    log.err("{s}\n", .{msg});
 
     while (true) {
         @breakpoint();
