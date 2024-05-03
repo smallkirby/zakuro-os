@@ -1,6 +1,7 @@
 //! This module provides the functionality of graphics output.
 
 const font = @import("font.zig");
+const colors = @import("color.zig");
 
 /// 2D vector.
 pub fn Vector(comptime T: type) type {
@@ -135,7 +136,11 @@ pub const PixelWriter = struct {
     ) void {
         for (0..size.y) |dy| {
             for (0..size.x) |dx| {
-                self.write_pixel(pos.x + dx, pos.y + dy, color);
+                self.write_pixel(
+                    pos.x + @as(u32, @truncate(dx)),
+                    pos.y + @as(u32, @truncate(dy)),
+                    color,
+                );
             }
         }
     }
@@ -149,22 +154,14 @@ pub const PixelWriter = struct {
                         self.write_pixel(
                             @truncate(pos.x + x),
                             @truncate(pos.y + y),
-                            .{
-                                .red = 0x00,
-                                .green = 0x00,
-                                .blue = 0x00,
-                            },
+                            colors.Black,
                         );
                     },
                     '.' => {
                         self.write_pixel(
                             @truncate(pos.x + x),
                             @truncate(pos.y + y),
-                            .{
-                                .red = 0xFF,
-                                .green = 0xFF,
-                                .blue = 0xFF,
-                            },
+                            colors.White,
                         );
                     },
                     else => {},
