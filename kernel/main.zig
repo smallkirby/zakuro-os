@@ -5,6 +5,7 @@ const ser = @import("serial.zig");
 const std = @import("std");
 const klog = @import("log.zig");
 const log = std.log.scoped(.main);
+const console = @import("console.zig");
 
 /// Override panic impl
 pub const panic = @import("panic.zig").panic_fn;
@@ -17,10 +18,20 @@ pub const std_options = klog.default_log_options;
 export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) noreturn {
     const serial = ser.init();
     klog.init(serial);
-
     log.info("Booting Zakuro OS...", .{});
 
     const pixel_writer = graphics.PixelWriter.new(fb_config);
+
+    var con = console.Console.new(pixel_writer, .{
+        .red = 0xFF,
+        .green = 0x00,
+        .blue = 0x00,
+    }, .{
+        .red = 0x00,
+        .green = 0x00,
+        .blue = 0x00,
+    });
+
     for (0..fb_config.horizontal_resolution) |x| {
         for (0..fb_config.vertical_resolution) |y| {
             pixel_writer.write_pixel(@truncate(x), @truncate(y), .{
@@ -45,19 +56,9 @@ export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) n
         }
     }
 
-    var buf: [256:0]u8 = undefined;
-    const l = std.fmt.bufPrint(&buf, "{d} + {d} = {d}\n", .{ 1, 2, 1 + 2 }) catch unreachable;
-    try pixel_writer.write_string(50, 30, l, .{
-        .red = 0x00,
-        .green = 0xFF,
-        .blue = 0x00,
-    });
-
-    try pixel_writer.write_string(50, 50, "Hello, Zakuro OS!", .{
-        .red = 0xFF,
-        .green = 0x00,
-        .blue = 0x00,
-    });
+    for (0..30) |i| {
+        con.print("{d}: {s}\n", .{ i, "Hello from console...!" });
+    }
 
     log.info("Reached end of kernel. Halting...", .{});
     while (true) {

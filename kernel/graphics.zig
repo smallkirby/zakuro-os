@@ -42,7 +42,7 @@ pub const PixelWriter = struct {
     }
 
     /// Write an ASCII character to the specified position.
-    pub fn write_ascii(self: Self, x: u32, y: u32, c: u8, color: PixelColor) !void {
+    pub fn write_ascii(self: Self, x: u32, y: u32, c: u8, color: PixelColor) void {
         const fonts = font.get_font(c).?;
         for (0..font.FONT_HEIGHT) |dy| {
             for (0..font.FONT_WIDTH) |dx| {
@@ -56,7 +56,7 @@ pub const PixelWriter = struct {
     }
 
     /// Write a string to the specified position until null character.
-    pub fn write_string(self: Self, x: u32, y: u32, s: []const u8, color: PixelColor) !void {
+    pub fn write_string(self: Self, x: u32, y: u32, s: []const u8, color: PixelColor) void {
         var px = x;
         var py = y;
         for (s) |c| {
@@ -65,7 +65,7 @@ pub const PixelWriter = struct {
                 px = x;
                 py += @truncate(font.FONT_HEIGHT);
             } else {
-                try self.write_ascii(px, py, c, color);
+                self.write_ascii(px, py, c, color);
                 px += @truncate(font.FONT_WIDTH);
             }
         }
