@@ -2,6 +2,14 @@
 
 const font = @import("font.zig");
 
+/// 2D vector.
+pub fn Vector(comptime T: type) type {
+    return struct {
+        x: T,
+        y: T,
+    };
+}
+
 /// Pixel data format defined by UEFI.
 pub const PixelFormat = enum(u8) {
     PixelRGBResv8BitPerColor,
@@ -22,6 +30,35 @@ pub const PixelColor = struct {
     red: u8,
     green: u8,
     blue: u8,
+};
+
+/// Width of the mouse cursor.
+const MouseCursorWidth = 12;
+/// Height of the mouse cursor.
+const MouseCursorHeight = 21;
+/// Mouse cursor shape data.
+const mouse_shape = [MouseCursorHeight]*const [MouseCursorWidth:0]u8{
+    ".           ",
+    "..          ",
+    ".@.         ",
+    ".@@.        ",
+    ".@@@.       ",
+    ".@@@@.      ",
+    ".@@@@@.     ",
+    ".@@@@@@.    ",
+    ".@@@@@@@.   ",
+    ".@@@@@@@@.  ",
+    ".@@@@@@@@@. ",
+    ".@@@@@@@....",
+    ".@@@@@@@.   ",
+    ".@@@@@@.    ",
+    ".@@@.@@.    ",
+    ".@@..@@@.   ",
+    ".@. .@@@.   ",
+    "..   .@@@.  ",
+    ".    .@@@.  ",
+    "      .@@.  ",
+    "       ...  ",
 };
 
 /// Pixel writer to write a pixel color to the framebuffer.
@@ -74,6 +111,66 @@ pub const PixelWriter = struct {
     /// Write a pixel color to the specified position.
     pub fn write_pixel(self: Self, x: u32, y: u32, color: PixelColor) void {
         return self.write_pixel_func(self, x, y, color);
+    }
+
+    /// Draw a rectangle with the specified position, size, and color.
+    /// The only edge of the rectangle is drawn.
+    pub fn draw_rectangle(
+        self: Self,
+        pos: Vector(u32),
+        size: Vector(u32),
+        color: PixelColor,
+    ) void {
+        for (0..size.x) |dx| {
+            self.write_pixel(size.x + dx, pos.y, color);
+        }
+    }
+
+    /// Fill a rectangle with the specified position, size, and color.
+    pub fn fill_rectangle(
+        self: Self,
+        pos: Vector(u32),
+        size: Vector(u32),
+        color: PixelColor,
+    ) void {
+        for (0..size.y) |dy| {
+            for (0..size.x) |dx| {
+                self.write_pixel(pos.x + dx, pos.y + dy, color);
+            }
+        }
+    }
+
+    /// Draw a mouse cursor at the specified position.
+    pub fn draw_mouse(self: Self, pos: Vector(u32)) void {
+        for (0..MouseCursorHeight) |y| {
+            for (0..MouseCursorWidth) |x| {
+                switch (mouse_shape[y][x]) {
+                    '@' => {
+                        self.write_pixel(
+                            @truncate(pos.x + x),
+                            @truncate(pos.y + y),
+                            .{
+                                .red = 0x00,
+                                .green = 0x00,
+                                .blue = 0x00,
+                            },
+                        );
+                    },
+                    '.' => {
+                        self.write_pixel(
+                            @truncate(pos.x + x),
+                            @truncate(pos.y + y),
+                            .{
+                                .red = 0xFF,
+                                .green = 0xFF,
+                                .blue = 0xFF,
+                            },
+                        );
+                    },
+                    else => {},
+                }
+            }
+        }
     }
 
     /// Write a pixel color to the specified position in RGB format.

@@ -60,6 +60,8 @@ export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) n
         con.print("{d}: {s}\n", .{ i, "Hello from console...!" });
     }
 
+    pixel_writer.draw_mouse(.{ .x = 100, .y = 200 });
+
     log.info("Reached end of kernel. Halting...", .{});
     while (true) {
         asm volatile ("hlt");
