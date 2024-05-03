@@ -11,9 +11,16 @@ pub fn init(ser: Serial) void {
     serial = ser;
 }
 
-pub fn log(level: stdlog.Level, message: []const u8) void {
-    _ = level;
+fn log(comptime level: stdlog.Level, message: []const u8) void {
+    const level_str = comptime switch (level) {
+        .debug => "[DEBUG] ",
+        .info => "[INFO ] ",
+        .warn => "[WARN ] ",
+        .err => "[ERROR] ",
+    };
+    serial.write_string(level_str);
     serial.write_string(message);
+    serial.write_string("\n");
 }
 
 pub fn debug(message: []const u8) void {
@@ -29,5 +36,6 @@ pub fn warn(message: []const u8) void {
 }
 
 pub fn err(message: []const u8) void {
+    @setCold(true);
     log(stdlog.Level.err, message);
 }

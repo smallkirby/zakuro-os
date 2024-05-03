@@ -4,6 +4,9 @@ const graphics = @import("graphics.zig");
 const ser = @import("serial.zig");
 const std = @import("std");
 const log = @import("log.zig");
+const panic_fn = @import("panic.zig").panic_fn;
+
+pub const panic = panic_fn;
 
 /// Kernel entry point called from the bootloader.
 /// The bootloader is a UEFI app using MS x64 calling convention,
