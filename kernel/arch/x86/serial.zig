@@ -58,6 +58,7 @@ pub fn init_serial(serial: *Serial, port: Ports, baud: u32) void {
     am.outb(0, p + UartOffset.FCR); // Disable FIFO
     am.outb(0b0000_0011, p + UartOffset.MCR); // Request-to-send, Data-terminal-ready
 
+    // set baud rate
     const divisor = DIVISOR_LATCH_NUMERATOR / baud;
     const c = am.inb(p + UartOffset.LCR);
     am.outb(c | 0b1000_0000, p + UartOffset.LCR); // Enable DLAB
