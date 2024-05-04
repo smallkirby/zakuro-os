@@ -5,5 +5,11 @@
   },
   "files.exclude": {
     "edk2": true
-  }
+  },
+  "zig.zls.completionLabelDetails": false,
+  "zig.zls.completionsWithReplace": false,
+  "zig.zls.enableAutofix": true,
+  "zig.zls.highlightGlobalVarDeclarations": true,
+  "zig.zls.inlayHintsExcludeSingleArgument": false,
+  "zig.zls.warnStyle": true
 }
