@@ -16,7 +16,7 @@ pub fn inw(port: u16) u8 {
     );
 }
 
-pub fn inl(port: u16) u8 {
+pub fn inl(port: u16) u32 {
     return asm volatile (
         \\inl %[port], %[ret]
         : [ret] "={eax}" (-> u32),
@@ -42,7 +42,7 @@ pub fn outw(value: u16, port: u16) void {
     );
 }
 
-pub fn outl(value: u16, port: u16) void {
+pub fn outl(value: u32, port: u16) void {
     asm volatile (
         \\outl %[value], %[port]
         :
@@ -51,6 +51,7 @@ pub fn outl(value: u16, port: u16) void {
     );
 }
 
+/// Pause the CPU for a short period of time.
 pub fn relax() void {
     asm volatile ("rep; nop");
 }

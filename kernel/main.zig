@@ -1,12 +1,13 @@
 //! Kernel entry point.
 
-const graphics = @import("graphics.zig");
-const ser = @import("serial.zig");
 const std = @import("std");
-const klog = @import("log.zig");
 const log = std.log.scoped(.main);
 const console = @import("console.zig");
+const klog = @import("log.zig");
+const ser = @import("serial.zig");
+const graphics = @import("graphics.zig");
 const color = @import("color.zig");
+const pci = @import("pci.zig");
 
 /// Override panic impl
 pub const panic = @import("panic.zig").panic_fn;
@@ -55,6 +56,9 @@ export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) n
     }
 
     pixel_writer.draw_mouse(.{ .x = 100, .y = 200 });
+
+    // Register PCI devices.
+    pci.register_all_devices();
 
     log.info("Reached end of kernel. Halting...", .{});
     while (true) {

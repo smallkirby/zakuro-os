@@ -7,7 +7,7 @@ pub fn build(b: *std.Build) void {
     // Dependency
     const chameleon = b.dependency("chameleon", .{});
     const clap = b.dependency("clap", .{});
-    const plog = b.addModule("plog", .{
+    const plog = b.createModule(.{
         .root_source_file = b.path("tools/mod/plog.zig"),
         .target = target,
         .optimize = optimize,
@@ -33,7 +33,9 @@ pub fn build(b: *std.Build) void {
     }
 
     // A tool to generate a font binary and embed it into the kernel.
+    //var makefont_outfile: *std.Build.Step.InstallFile = undefined;
     var makefont_output: std.Build.LazyPath = undefined;
+    var makefont_outfile: *std.Build.Step.InstallFile = undefined;
     {
         const makefont = b.addExecutable(.{
             .name = "makefont",
@@ -53,8 +55,7 @@ pub fn build(b: *std.Build) void {
 
         const run_makefont_step = b.step("makefont", "Generate a font binary");
         run_makefont_step.dependOn(&makefont_artifact.step);
-        const f = b.addInstallFileWithDir(makefont_output, .prefix, "font.o");
-        b.getInstallStep().dependOn(&f.step);
+        makefont_outfile = b.addInstallFileWithDir(makefont_output, .prefix, "font.o");
     }
 
     // A tool to build EFI using EDK2.
@@ -89,7 +90,7 @@ pub fn build(b: *std.Build) void {
     {
         kernel = b.addExecutable(.{
             .name = "kernel.elf",
-            .root_source_file = b.path("kernel/main.zig"),
+            .root_source_file = b.path("root.zig"),
             .target = b.resolveTargetQuery(.{
                 .cpu_arch = .x86_64,
                 .os_tag = .freestanding,
@@ -130,10 +131,11 @@ pub fn build(b: *std.Build) void {
     // Declare a test step.
     {
         const exe_unit_tests = b.addTest(.{
-            .root_source_file = b.path("src/main.zig"),
+            .root_source_file = b.path("kernel/test.zig"),
             .target = target,
             .optimize = optimize,
         });
+        exe_unit_tests.addObjectFile(makefont_output);
         const run_exe_unit_tests = b.addRunArtifact(exe_unit_tests);
         const test_step = b.step("test", "Run unit tests");
         test_step.dependOn(&run_exe_unit_tests.step);
