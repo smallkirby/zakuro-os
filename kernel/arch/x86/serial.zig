@@ -52,7 +52,7 @@ const UartOffset = struct {
 };
 
 /// Initialize a serial console, then set a write-function to `Serial.write_fn`.
-pub fn init_serial(serial: *Serial, port: Ports, baud: u32) void {
+pub fn initSerial(serial: *Serial, port: Ports, baud: u32) void {
     const p = @intFromEnum(port);
     am.outb(0b00_000_0_00, p + UartOffset.LCR); // 8n1: no paritiy, 1 stop bit, 8 data bit
     am.outb(0, p + UartOffset.IER); // Disable interrupts
@@ -67,21 +67,21 @@ pub fn init_serial(serial: *Serial, port: Ports, baud: u32) void {
     am.outb(@truncate((divisor >> 8) & 0xFF), p + UartOffset.DLM);
     am.outb(c & 0b0111_1111, p + UartOffset.LCR); // Disable DLAB
 
-    get_serial(serial, port);
+    getSerial(serial, port);
 }
 
 /// Get a serial console, then set a write-function to `Serial.write_fn`.
 /// You MUST ensure that the console of the `port` is initialized before calling this function.
-pub fn get_serial(serial: *Serial, port: Ports) void {
+pub fn getSerial(serial: *Serial, port: Ports) void {
     serial._write_fn = switch (port) {
-        Ports.COM1 => write_byte_com1,
-        Ports.COM2 => write_byte_com2,
-        Ports.COM3 => write_byte_com3,
-        Ports.COM4 => write_byte_com5,
+        Ports.COM1 => writeByteCom1,
+        Ports.COM2 => writeByteCom2,
+        Ports.COM3 => writeByteCom3,
+        Ports.COM4 => writeByteCom5,
     };
 }
 
-fn write_byte(byte: u8, port: Ports) void {
+fn writeByte(byte: u8, port: Ports) void {
     // wait until the transmitter holding buffer is empty
     while (am.inb(@intFromEnum(port) + UartOffset.LSR) & 0b0010_0000 == 0) {
         am.relax();
@@ -91,18 +91,18 @@ fn write_byte(byte: u8, port: Ports) void {
     am.outb(byte, @intFromEnum(port));
 }
 
-fn write_byte_com1(byte: u8) void {
-    write_byte(byte, Ports.COM1);
+fn writeByteCom1(byte: u8) void {
+    writeByte(byte, Ports.COM1);
 }
 
-fn write_byte_com2(byte: u8) void {
-    write_byte(byte, Ports.COM2);
+fn writeByteCom2(byte: u8) void {
+    writeByte(byte, Ports.COM2);
 }
 
-fn write_byte_com3(byte: u8) void {
-    write_byte(byte, Ports.COM3);
+fn writeByteCom3(byte: u8) void {
+    writeByte(byte, Ports.COM3);
 }
 
-fn write_byte_com5(byte: u8) void {
-    write_byte(byte, Ports.COM4);
+fn writeByteCom5(byte: u8) void {
+    writeByte(byte, Ports.COM4);
 }

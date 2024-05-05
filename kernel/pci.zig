@@ -98,7 +98,7 @@ const RegisterOffsets = enum(u8) {
     MinGrant = 0x3E,
     MaxLatency = 0x3F,
 
-    pub fn RegisterWidth(comptime reg: @This()) type {
+    pub fn Width(comptime reg: @This()) type {
         return switch (reg) {
             .RevisionID,
             .ProgIF,
@@ -153,41 +153,41 @@ pub const PciDevice = struct {
     }
 
     /// Read data from the configuration space of the device.
-    pub fn read_data(
+    pub fn readData(
         self: Self,
         function: u3,
         comptime reg: RegisterOffsets,
-    ) reg.RegisterWidth() {
+    ) reg.Width() {
         const addr = self.address(function, reg);
-        arch.pci.set_config_address(addr);
-        const val = arch.pci.get_config_data();
+        arch.pci.setConfigAddress(addr);
+        const val = arch.pci.getConfigData();
 
         return @truncate(val >> (@intFromEnum(reg) % 4 * 8));
     }
 
     /// Check if the device is a single-function device.
-    pub fn is_single_function(self: Self) bool {
-        const header_type = self.read_data(0, RegisterOffsets.HeaderType);
+    pub fn isSingleFunction(self: Self) bool {
+        const header_type = self.readData(0, RegisterOffsets.HeaderType);
         return (header_type & 0x80) == 0;
     }
 
     /// Read a 16-bit Vendor ID of the device from the configuration space.
-    pub fn read_vendor_id(self: Self, function: u3) u16 {
-        return self.read_data(function, RegisterOffsets.VendorID);
+    pub fn readVendorId(self: Self, function: u3) u16 {
+        return self.readData(function, RegisterOffsets.VendorID);
     }
 
     /// Read a 16-bit Device ID of the device from the configuration space.
-    pub fn read_device_id(self: Self, function: u3) u16 {
-        return self.read_data(function, RegisterOffsets.DeviceID);
+    pub fn readDeviceId(self: Self, function: u3) u16 {
+        return self.readData(function, RegisterOffsets.DeviceID);
     }
 
     /// Read a 8-bit Header Type of the device from the configuration space.
-    fn read_header_type(self: Self, function: u3) u8 {
-        return self.read_data(function, RegisterOffsets.HeaderType);
+    fn readHeaderType(self: Self, function: u3) u8 {
+        return self.readData(function, RegisterOffsets.HeaderType);
     }
 
     /// Read bus numbers from the configuration space of bridge devices (Header Type = 1 or 2).
-    fn read_bus_number(self: Self, function: u3) u32 {
+    fn readBusNumber(self: Self, function: u3) u32 {
         const addr = ConfigAddress{
             .offset = 0x18,
             .function = function,
@@ -195,44 +195,44 @@ pub const PciDevice = struct {
             .bus = self.bus,
         };
 
-        arch.pci.set_config_address(addr);
-        return arch.pci.get_config_data();
+        arch.pci.setConfigAddress(addr);
+        return arch.pci.getConfigData();
     }
 };
 
-fn register_function(bus: u8, device: u5, function: u3) void {
+fn registerFunction(bus: u8, device: u5, function: u3) void {
     const dev = PciDevice{ .bus = bus, .device = device };
-    const base_class = dev.read_data(function, RegisterOffsets.BaseClass);
-    const subclass = dev.read_data(function, RegisterOffsets.Subclass);
+    const base_class = dev.readData(function, RegisterOffsets.BaseClass);
+    const subclass = dev.readData(function, RegisterOffsets.Subclass);
 
     // TODO: register device here
     log.info("PCI: {X:0>2}:{X:0>2}:{X:0>2}", .{ bus, device, function });
 
     if (base_class == @intFromEnum(ClassCodes.Bridge) and subclass == 0x04) {
         // this is a PCI-to-PCI bridge
-        const bus_number = dev.read_bus_number(function);
+        const bus_number = dev.readBusNumber(function);
         const secondary_bus: u8 = @truncate(bus_number >> 8);
-        register_bus(secondary_bus);
+        registerBus(secondary_bus);
     }
 }
 
-fn register_device(bus: u8, device: u5) void {
+fn registerDevice(bus: u8, device: u5) void {
     const dev = PciDevice{ .bus = bus, .device = device };
-    if (dev.read_vendor_id(0) == 0xFFFF) return;
+    if (dev.readVendorId(0) == 0xFFFF) return;
 
-    register_function(bus, device, 0);
+    registerFunction(bus, device, 0);
 
-    if (dev.is_single_function()) return;
+    if (dev.isSingleFunction()) return;
     for (1..8) |function| {
-        if (dev.read_vendor_id(@truncate(function)) != 0xFFFF) {
-            register_function(bus, device, @truncate(function));
+        if (dev.readVendorId(@truncate(function)) != 0xFFFF) {
+            registerFunction(bus, device, @truncate(function));
         }
     }
 }
 
-fn register_bus(bus: u8) void {
+fn registerBus(bus: u8) void {
     for (0..32) |device| {
-        register_device(bus, @truncate(device));
+        registerDevice(bus, @truncate(device));
     }
 }
 
@@ -244,21 +244,21 @@ fn register_bus(bus: u8) void {
 /// The last one is similar to the second, but configures registers while scanning.
 /// This function uses the second method.
 /// TODO: After kheap allocator is implemented, we should dynamically allocate memory for the device list.
-pub fn register_all_devices() void {
+pub fn registerAllDevices() void {
     // Clear the device list.
     num_devices = 0;
     @memset(&devices, null);
 
     // Recursively scan all devices under valid buses.
     const bridge = PciDevice{ .bus = 0, .device = 0 };
-    if (bridge.is_single_function()) {
-        register_bus(0);
+    if (bridge.isSingleFunction()) {
+        registerBus(0);
     } else {
         for (0..8) |function| {
-            if (bridge.read_vendor_id(@truncate(function)) == 0xFFFF) {
+            if (bridge.readVendorId(@truncate(function)) == 0xFFFF) {
                 continue;
             }
-            register_bus(@truncate(function));
+            registerBus(@truncate(function));
         }
     }
 }

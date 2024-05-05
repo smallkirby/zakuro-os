@@ -6,7 +6,7 @@ const am = @import("asm.zig");
 const ConfigAddress = pci.ConfigAddress;
 
 /// Set PCI configuration address.
-pub fn set_config_address(addr: ConfigAddress) void {
+pub fn setConfigAddress(addr: ConfigAddress) void {
     am.outl(
         @truncate(addr.as_u32() & 0xFFFF_FFFC),
         pci.addr_configuration_address,
@@ -14,6 +14,6 @@ pub fn set_config_address(addr: ConfigAddress) void {
 }
 
 /// Get PCI configuration data.
-pub fn get_config_data() u32 {
+pub fn getConfigData() u32 {
     return am.inl(pci.addr_configuration_data);
 }

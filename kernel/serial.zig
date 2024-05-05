@@ -30,7 +30,7 @@ pub const Serial = struct {
 /// You MUST call this function before using the serial console.
 pub fn init() Serial {
     var serial = Serial{};
-    arch.serial.init_serial(&serial, .COM1, 9600);
+    arch.serial.initSerial(&serial, .COM1, 9600);
 
     return serial;
 }
@@ -39,7 +39,7 @@ pub fn init() Serial {
 /// You MUST call `init` before calling this function.
 pub fn get() Serial {
     var serial = Serial{};
-    arch.serial.get_serial(&serial, .COM1);
+    arch.serial.getSerial(&serial, .COM1);
 
     return serial;
 }

@@ -19,7 +19,7 @@ const PanicError = error{};
 const Writer = std.io.Writer(
     void,
     PanicError,
-    writer_function,
+    writerFunction,
 );
 
 fn write(comptime fmt: []const u8, args: anytype) void {
@@ -30,7 +30,7 @@ fn write(comptime fmt: []const u8, args: anytype) void {
     ) catch unreachable;
 }
 
-fn writer_function(context: void, bytes: []const u8) PanicError!usize {
+fn writerFunction(context: void, bytes: []const u8) PanicError!usize {
     _ = context;
     serial.write_string(bytes);
 
@@ -49,22 +49,22 @@ fn panic(
     log.err("{s}\n", .{msg});
 
     if (error_return_trace) |ert| {
-        print_stack_trace(ert) catch |err| {
+        printStackTrace(ert) catch |err| {
             log.err("Failed to write stack trace: {s}\n", .{err});
         };
     }
 
-    bp_halt();
+    bpHalt();
 }
 
-fn bp_halt() noreturn {
+fn bpHalt() noreturn {
     @setCold(true);
     while (true) {
         @breakpoint();
     }
 }
 
-fn print_stack_trace(stack_trace: *builtin.StackTrace) !void {
+fn printStackTrace(stack_trace: *builtin.StackTrace) !void {
     var frames_left: usize = @min(stack_trace.index, stack_trace.instruction_addresses.len);
     var frames_index: usize = 0;
 
@@ -73,10 +73,10 @@ fn print_stack_trace(stack_trace: *builtin.StackTrace) !void {
         frames_index = (frames_index + 1) % stack_trace.instruction_addresses.len;
     }) {
         const return_address = stack_trace.instruction_addresses[frames_index];
-        print_frame(return_address) catch |err| write("Failed to print this frame: {s}\n", .{err});
+        printFrame(return_address) catch |err| write("Failed to print this frame: {s}\n", .{err});
     }
 }
 
-fn print_frame(address: usize) !void {
+fn printFrame(address: usize) !void {
     write("{x}: {s}\n", .{ address, "TODO: print frame" });
 }

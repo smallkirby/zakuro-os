@@ -15,7 +15,7 @@ const _fonts_len_raw = @extern(*u32, .{
 
 /// Get 16x8 pixel font data for a given ascii character.
 /// Returns null if the character is not supported.
-pub fn get_font(char: u8) ?[16]u8 {
+pub fn getFont(char: u8) ?[16]u8 {
     if (@as(usize, char) >= @intFromPtr(_fonts_len_raw)) {
         return null;
     }

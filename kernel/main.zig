@@ -29,11 +29,11 @@ export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) n
     // Clear the screen
     for (0..fb_config.horizontal_resolution) |x| {
         for (0..fb_config.vertical_resolution) |y| {
-            pixel_writer.write_pixel(@truncate(x), @truncate(y), color.LightPurple);
+            pixel_writer.writePixel(@truncate(x), @truncate(y), color.LightPurple);
         }
     }
     // Draw a dock
-    pixel_writer.fill_rectangle(
+    pixel_writer.fillRectangle(
         .{ .x = fb_config.horizontal_resolution - 0x30, .y = 0 },
         .{ .x = 0x30, .y = fb_config.vertical_resolution },
         color.DarkPurple,
@@ -41,7 +41,7 @@ export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) n
     // Draw hot button (mock)
     for (0..3) |x| {
         for (0..3) |y| {
-            pixel_writer.fill_rectangle(
+            pixel_writer.fillRectangle(
                 .{
                     .x = fb_config.horizontal_resolution - 0x20 + @as(u32, @truncate(x * 6)),
                     .y = fb_config.vertical_resolution - 0x20 + @as(u32, @truncate(y * 6)),
@@ -56,10 +56,10 @@ export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) n
         con.print("{d}: {s}\n", .{ i, "Hello from console...!" });
     }
 
-    pixel_writer.draw_mouse(.{ .x = 100, .y = 200 });
+    pixel_writer.drawMouse(.{ .x = 100, .y = 200 });
 
     // Register PCI devices.
-    pci.register_all_devices();
+    pci.registerAllDevices();
 
     log.info("Reached end of kernel. Halting...", .{});
     while (true) {
