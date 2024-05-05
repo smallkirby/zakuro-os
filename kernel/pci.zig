@@ -1,8 +1,9 @@
 //! TODO
 
 const std = @import("std");
+const zakuro = @import("zakuro");
 const log = std.log.scoped(.pci);
-const arch = @import("arch.zig").impl;
+const arch = zakuro.arch;
 
 /// List of registered PCI devices.
 /// TODO: Remove this global variable and use a dynamically allocated memory.

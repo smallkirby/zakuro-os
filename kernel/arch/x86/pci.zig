@@ -1,8 +1,9 @@
 //! This module provides a x64 impl for PCI access.
 
-const pci = @import("../../pci.zig");
+const zakuro = @import("zakuro");
+const pci = zakuro.pci;
 const am = @import("asm.zig");
-const ConfigAddress = @import("../../pci.zig").ConfigAddress;
+const ConfigAddress = pci.ConfigAddress;
 
 /// Set PCI configuration address.
 pub fn set_config_address(addr: ConfigAddress) void {

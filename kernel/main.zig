@@ -1,13 +1,14 @@
 //! Kernel entry point.
 
 const std = @import("std");
+const zakuro = @import("zakuro");
 const log = std.log.scoped(.main);
-const console = @import("console.zig");
-const klog = @import("log.zig");
-const ser = @import("serial.zig");
-const graphics = @import("graphics.zig");
-const color = @import("color.zig");
-const pci = @import("pci.zig");
+const console = zakuro.console;
+const klog = zakuro.log;
+const ser = zakuro.serial;
+const graphics = zakuro.graphics;
+const color = zakuro.color;
+const pci = zakuro.pci;
 
 /// Override panic impl
 pub const panic = @import("panic.zig").panic_fn;

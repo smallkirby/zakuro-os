@@ -1,7 +1,8 @@
 //! Serial 8250 UART.
 //! ref: https://en.wikibooks.org/wiki/Serial_Programming/8250_UART_Programming
 
-const Serial = @import("../../serial.zig").Serial;
+const zakuro = @import("zakuro");
+const Serial = zakuro.serial.Serial;
 const am = @import("asm.zig");
 
 /// Available serial ports.

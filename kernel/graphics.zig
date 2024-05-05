@@ -1,7 +1,8 @@
 //! This module provides the functionality of graphics output.
 
-const font = @import("font.zig");
-const colors = @import("color.zig");
+const zakuro = @import("zakuro");
+const font = zakuro.font;
+const colors = zakuro.color;
 
 /// 2D vector.
 pub fn Vector(comptime T: type) type {

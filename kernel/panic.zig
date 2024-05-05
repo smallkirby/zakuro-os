@@ -4,10 +4,11 @@
 //! Therefore, we implement a simple panic handler here.
 
 const std = @import("std");
+const zakuro = @import("zakuro");
 const builtin = std.builtin;
 const debug = std.debug;
 const log = std.log.scoped(.panic);
-const ser = @import("serial.zig");
+const ser = zakuro.serial;
 const format = std.fmt.format;
 
 /// Implementation of the panic function.

@@ -1,7 +1,8 @@
 //! This module provides a logging to the serial console.
 
-const Serial = @import("serial.zig").Serial;
 const std = @import("std");
+const zakuro = @import("zakuro");
+const Serial = zakuro.serial.Serial;
 const stdlog = std.log;
 const io = std.io;
 const format = std.fmt.format;

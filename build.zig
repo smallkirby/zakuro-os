@@ -88,9 +88,14 @@ pub fn build(b: *std.Build) void {
     // Main binary
     var kernel: *std.Build.Step.Compile = undefined;
     {
+        const zakuro = b.createModule(.{
+            .root_source_file = b.path("kernel/zakuro.zig"),
+        });
+        zakuro.addImport("zakuro", zakuro);
+
         kernel = b.addExecutable(.{
             .name = "kernel.elf",
-            .root_source_file = b.path("root.zig"),
+            .root_source_file = b.path("kernel/main.zig"),
             .target = b.resolveTargetQuery(.{
                 .cpu_arch = .x86_64,
                 .os_tag = .freestanding,
@@ -104,6 +109,7 @@ pub fn build(b: *std.Build) void {
         kernel.link_z_relro = false;
         kernel.entry = .{ .symbol_name = "kernel_main" };
         kernel.addObjectFile(makefont_output);
+        kernel.root_module.addImport("zakuro", zakuro);
 
         b.installArtifact(kernel);
     }

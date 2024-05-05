@@ -1,6 +1,7 @@
 //! This module provides a serial interface.
 
-const arch = @import("arch.zig").impl;
+const zakuro = @import("zakuro");
+const arch = zakuro.arch;
 
 /// Serial console.
 pub const Serial = struct {
