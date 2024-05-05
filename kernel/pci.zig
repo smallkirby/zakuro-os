@@ -5,17 +5,25 @@ const zakuro = @import("zakuro");
 const log = std.log.scoped(.pci);
 const arch = zakuro.arch;
 
+/// Maximum number of PCI devices that can be registered.
+const max_device_num: usize = 256;
 /// List of registered PCI devices.
 /// TODO: Remove this global variable and use a dynamically allocated memory.
-var devices: [256]?PciDevice = [_]?PciDevice{null} ** 256;
+pub var devices: [max_device_num]?DeviceInfo = [_]?DeviceInfo{null} ** max_device_num;
 /// Number of registered PCI devices.
 /// TODO: Remove this global variable and use a dynamically allocated memory.
-var num_devices: u8 = 0;
+pub var num_devices: usize = 0;
 
 /// I/O port for configuration address.
 pub const addr_configuration_address = 0xCF8;
 /// I/O port for configuration data.
 pub const addr_configuration_data = 0xCFC;
+
+/// List of available errors.
+pub const PciError = error{
+    /// Device list is full.
+    ListFull,
+};
 
 /// Configration address register.
 pub const ConfigAddress = packed struct(u32) {
@@ -39,7 +47,7 @@ pub const ConfigAddress = packed struct(u32) {
     }
 };
 
-/// Class Code of PCI devices.
+/// Base class Code of PCI devices.
 /// ref: https://wiki.osdev.org/PCI#Class_Codes
 const ClassCodes = enum(u8) {
     Unclassified = 0x00,
@@ -113,7 +121,7 @@ const RegisterOffsets = enum(u8) {
             .InterruptPin,
             .MinGrant,
             .MaxLatency,
-            => u32,
+            => u8,
             .VendorID,
             .DeviceID,
             .Command,
@@ -181,6 +189,28 @@ pub const PciDevice = struct {
         return self.readData(function, RegisterOffsets.DeviceID);
     }
 
+    /// Read a various information of the device from the configuration space.
+    pub fn readDeviceInfo(self: Self, function: u3) ?DeviceInfo {
+        const vendor_id = self.readVendorId(function);
+        if (vendor_id == 0xFFFF) {
+            return null;
+        }
+        const revision_id = self.readData(function, RegisterOffsets.RevisionID);
+        const base_class = self.readData(function, RegisterOffsets.BaseClass);
+        const subclass = self.readData(function, RegisterOffsets.Subclass);
+        const header_type = self.readHeaderType(function);
+
+        return .{
+            .device = self,
+            .function = function,
+            .vendor_id = vendor_id,
+            .revision_id = revision_id,
+            .base_class = base_class,
+            .subclass = subclass,
+            .header_type = header_type,
+        };
+    }
+
     /// Read a 8-bit Header Type of the device from the configuration space.
     fn readHeaderType(self: Self, function: u3) u8 {
         return self.readData(function, RegisterOffsets.HeaderType);
@@ -200,39 +230,69 @@ pub const PciDevice = struct {
     }
 };
 
-fn registerFunction(bus: u8, device: u5, function: u3) void {
+/// Device information including BDF and other specs.
+/// One function of a PCI device corresponds to one DeviceInfo.
+pub const DeviceInfo = struct {
+    /// PCI device.
+    device: PciDevice,
+    /// Function number that this DeviceInfo represents.
+    function: u3,
+    /// Vendor ID
+    vendor_id: u16,
+    /// Revision ID
+    revision_id: u8,
+    /// Base class code
+    base_class: u8,
+    /// Subclass code
+    subclass: u8,
+    /// Header type
+    header_type: u8,
+};
+
+/// Add a PCI device to the known device list.
+fn addDevice(device: PciDevice, function: u3) PciError!void {
+    if (num_devices >= max_device_num) {
+        return PciError.ListFull;
+    }
+
+    const info = device.readDeviceInfo(function);
+    devices[num_devices] = info;
+    num_devices += 1;
+}
+
+fn registerFunction(bus: u8, device: u5, function: u3) PciError!void {
     const dev = PciDevice{ .bus = bus, .device = device };
     const base_class = dev.readData(function, RegisterOffsets.BaseClass);
     const subclass = dev.readData(function, RegisterOffsets.Subclass);
 
     // TODO: register device here
-    log.info("PCI: {X:0>2}:{X:0>2}:{X:0>2}", .{ bus, device, function });
+    try addDevice(dev, function);
 
     if (base_class == @intFromEnum(ClassCodes.Bridge) and subclass == 0x04) {
         // this is a PCI-to-PCI bridge
         const bus_number = dev.readBusNumber(function);
         const secondary_bus: u8 = @truncate(bus_number >> 8);
-        registerBus(secondary_bus);
+        try registerBus(secondary_bus);
     }
 }
 
-fn registerDevice(bus: u8, device: u5) void {
+fn registerDevice(bus: u8, device: u5) PciError!void {
     const dev = PciDevice{ .bus = bus, .device = device };
     if (dev.readVendorId(0) == 0xFFFF) return;
 
-    registerFunction(bus, device, 0);
+    try registerFunction(bus, device, 0);
 
     if (dev.isSingleFunction()) return;
     for (1..8) |function| {
         if (dev.readVendorId(@truncate(function)) != 0xFFFF) {
-            registerFunction(bus, device, @truncate(function));
+            try registerFunction(bus, device, @truncate(function));
         }
     }
 }
 
-fn registerBus(bus: u8) void {
+fn registerBus(bus: u8) PciError!void {
     for (0..32) |device| {
-        registerDevice(bus, @truncate(device));
+        try registerDevice(bus, @truncate(device));
     }
 }
 
@@ -244,7 +304,7 @@ fn registerBus(bus: u8) void {
 /// The last one is similar to the second, but configures registers while scanning.
 /// This function uses the second method.
 /// TODO: After kheap allocator is implemented, we should dynamically allocate memory for the device list.
-pub fn registerAllDevices() void {
+pub fn registerAllDevices() PciError!void {
     // Clear the device list.
     num_devices = 0;
     @memset(&devices, null);
@@ -252,13 +312,13 @@ pub fn registerAllDevices() void {
     // Recursively scan all devices under valid buses.
     const bridge = PciDevice{ .bus = 0, .device = 0 };
     if (bridge.isSingleFunction()) {
-        registerBus(0);
+        try registerBus(0);
     } else {
         for (0..8) |function| {
             if (bridge.readVendorId(@truncate(function)) == 0xFFFF) {
                 continue;
             }
-            registerBus(@truncate(function));
+            try registerBus(@truncate(function));
         }
     }
 }

@@ -59,8 +59,27 @@ export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) n
     pixel_writer.drawMouse(.{ .x = 100, .y = 200 });
 
     // Register PCI devices.
-    pci.registerAllDevices();
+    pci.registerAllDevices() catch |err| switch (err) {
+        error.ListFull => {
+            @panic("List of PCI devices if full. Can't register more devices.");
+        },
+    };
+    for (0..pci.num_devices) |i| {
+        if (pci.devices[i]) |info| {
+            log.info("Found PCI device: {X:0>2}:{X:0>2}:{X:0>1} vendor={X} class={X}:{X}", .{
+                info.device.bus,
+                info.device.device,
+                info.function,
+                info.vendor_id,
+                info.base_class,
+                info.subclass,
+            });
+        } else {
+            @panic("Number of registered devices and its content mismatch.");
+        }
+    }
 
+    // EOL
     log.info("Reached end of kernel. Halting...", .{});
     while (true) {
         asm volatile ("hlt");
