@@ -198,6 +198,7 @@ pub const PciDevice = struct {
         const revision_id = self.readData(function, RegisterOffsets.RevisionID);
         const base_class = self.readData(function, RegisterOffsets.BaseClass);
         const subclass = self.readData(function, RegisterOffsets.Subclass);
+        const prog_if = self.readData(function, RegisterOffsets.ProgIF);
         const header_type = self.readHeaderType(function);
 
         return .{
@@ -207,6 +208,7 @@ pub const PciDevice = struct {
             .revision_id = revision_id,
             .base_class = base_class,
             .subclass = subclass,
+            .prog_if = prog_if,
             .header_type = header_type,
         };
     }
@@ -245,6 +247,8 @@ pub const DeviceInfo = struct {
     base_class: u8,
     /// Subclass code
     subclass: u8,
+    /// Program interface
+    prog_if: u8,
     /// Header type
     header_type: u8,
 };
@@ -322,6 +326,12 @@ pub fn registerAllDevices() PciError!void {
         }
     }
 }
+
+const KnownVendors = enum(u16) {
+    Intel = 0x8086,
+    Nec = 0x1033,
+    Qemu = 0x1234,
+};
 
 /////////////////////////////////////
 

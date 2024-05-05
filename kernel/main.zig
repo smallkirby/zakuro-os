@@ -66,13 +66,14 @@ export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) n
     };
     for (0..pci.num_devices) |i| {
         if (pci.devices[i]) |info| {
-            log.info("Found PCI device: {X:0>2}:{X:0>2}:{X:0>1} vendor={X} class={X}:{X}", .{
+            log.info("Found PCI device: {X:0>2}:{X:0>2}:{X:0>1} vendor={X:0>2} class={X:0>2}:{X:0>2}:{X:0>2}", .{
                 info.device.bus,
                 info.device.device,
                 info.function,
                 info.vendor_id,
                 info.base_class,
                 info.subclass,
+                info.prog_if,
             });
         } else {
             @panic("Number of registered devices and its content mismatch.");
