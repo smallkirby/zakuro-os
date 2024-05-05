@@ -80,6 +80,25 @@ export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) n
         }
     }
 
+    // Find a xHC controller.
+    var xhc_maybe: ?pci.DeviceInfo = null;
+    for (0..pci.num_devices) |i| {
+        if (pci.devices[i]) |info| {
+            if (info.base_class == @intFromEnum(pci.ClassCodes.SerialBusController) and info.subclass == 0x03 and info.prog_if == 0x30) {
+                xhc_maybe = info;
+                // We assume that Intel's xHC controller is the main one.
+                if (info.vendor_id == @intFromEnum(pci.KnownVendors.Intel)) {
+                    break;
+                }
+            }
+        }
+    }
+    const xhc = xhc_maybe orelse @panic("xHC controller not found.");
+    const bar0 = xhc.device.readBar(xhc.function, 0);
+    const bar1 = xhc.device.readBar(xhc.function, 1);
+    const xhc_mmio_base: [*]u32 = @ptrFromInt((@as(u64, bar1) << 32) | @as(u64, bar0));
+    log.info("xHC MMIO base: 0x{X}", .{@intFromPtr(xhc_mmio_base)});
+
     // EOL
     log.info("Reached end of kernel. Halting...", .{});
     while (true) {

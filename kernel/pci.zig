@@ -49,7 +49,7 @@ pub const ConfigAddress = packed struct(u32) {
 
 /// Base class Code of PCI devices.
 /// ref: https://wiki.osdev.org/PCI#Class_Codes
-const ClassCodes = enum(u8) {
+pub const ClassCodes = enum(u8) {
     Unclassified = 0x00,
     MassStorageController = 0x01,
     NetworkController = 0x02,
@@ -187,6 +187,19 @@ pub const PciDevice = struct {
     /// Read a 16-bit Device ID of the device from the configuration space.
     pub fn readDeviceId(self: Self, function: u3) u16 {
         return self.readData(function, RegisterOffsets.DeviceID);
+    }
+
+    /// Read a 32-bit BAR (Base Address Register) of the device from the configuration space.
+    pub fn readBar(self: Self, function: u3, comptime index: u3) u32 {
+        const offset: u8 = @intFromEnum(RegisterOffsets.BAR0) + @as(u8, index) * 4;
+        const addr = ConfigAddress{
+            .offset = offset,
+            .function = function,
+            .device = self.device,
+            .bus = self.bus,
+        };
+        arch.pci.setConfigAddress(addr);
+        return arch.pci.getConfigData();
     }
 
     /// Read a various information of the device from the configuration space.
@@ -327,7 +340,7 @@ pub fn registerAllDevices() PciError!void {
     }
 }
 
-const KnownVendors = enum(u16) {
+pub const KnownVendors = enum(u16) {
     Intel = 0x8086,
     Nec = 0x1033,
     Qemu = 0x1234,
