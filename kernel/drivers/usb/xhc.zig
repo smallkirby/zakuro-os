@@ -5,6 +5,8 @@ const zakuro = @import("zakuro");
 const log = std.log.scoped(.xhci);
 const arch = zakuro.arch;
 
+const num_device_slots = 8;
+
 /// xHCI Capability Registers.
 const CapabilityRegisters = packed struct {
     /// Offset from register base to the Operational Register Space.
@@ -14,7 +16,7 @@ const CapabilityRegisters = packed struct {
     /// BCD encoding of the xHCI spec revision number supported by this HC.
     hci_version: u16,
     /// HC Structural Parameters 1.
-    hcs_params1: u32,
+    hcs_params1: StructuralParameters1,
     /// HC Structural Parameters 2.
     hcs_params2: u32,
     /// HC Structural Parameters 3.
@@ -48,7 +50,7 @@ const OperationalRegisters = packed struct {
     /// Device Context Base Address Array Pointer.
     dcbaap: u64,
     /// Configure.
-    config: u32,
+    config: ConfigureRegister,
 };
 
 /// USB Command Register. (USBCMD)
@@ -117,6 +119,18 @@ pub const StatusRegister = packed struct(u32) {
     _reserved3: u19,
 };
 
+/// Runtime xHC configuration register. (CONFIG)
+const ConfigureRegister = packed struct(u32) {
+    /// Number of Device Slots Enabled.
+    max_slots_en: u8,
+    /// U3 Entry Enable.
+    u3e: bool,
+    /// Configuration Information Enable.
+    cie: bool,
+    /// Reserved.
+    _reserved: u22,
+};
+
 /// xHC Runtime Registers.
 const RuntimeRegisters = packed struct {
     // TODO
@@ -132,6 +146,18 @@ const DoorbellRegister = packed struct(u32) {
     db_stream_id: u16,
 };
 
+/// HCSPARAMS1
+const StructuralParameters1 = packed struct(u32) {
+    /// Number of device slots.
+    maxslots: u8,
+    /// Number of interrupters.
+    maxintrs: u11,
+    /// Reserved.
+    _reserved: u5,
+    /// Number of ports.
+    maxports: u8,
+};
+
 /// xHC Host Controller
 pub const Controller = struct {
     /// MMIO base of the HC.
@@ -140,7 +166,7 @@ pub const Controller = struct {
     /// Capability Registers.
     capability_regs: *volatile CapabilityRegisters,
     /// Operational Registers.
-    operationla_regs: *volatile OperationalRegisters,
+    operational_regs: *volatile OperationalRegisters,
     /// Runtime Registers.
     runtime_regs: *volatile RuntimeRegisters,
     /// Doorbell Registers.
@@ -162,7 +188,7 @@ pub const Controller = struct {
         return Self{
             .mmio_base = mmio_base,
             .capability_regs = capability_regs,
-            .operationla_regs = operational_regs,
+            .operational_regs = operational_regs,
             .runtime_regs = runtime_regs,
             .doorbell_regs = doorbell_regs,
         };
@@ -170,34 +196,40 @@ pub const Controller = struct {
 
     /// Reset the xHC.
     pub fn reset(self: Self) void {
-        var cmd = self.operationla_regs.usbcmd;
+        var cmd = self.operational_regs.usbcmd;
 
         // Disable interrupts and stop the controller.
         cmd.inte = false;
         cmd.hsee = false;
         cmd.ewe = false;
-        if (!self.operationla_regs.usbsts.hch) {
+        if (!self.operational_regs.usbsts.hch) {
             cmd.rs = false;
         }
-        self.operationla_regs.usbcmd = cmd;
+        self.operational_regs.usbcmd = cmd;
 
         // Wait for the controller to stop.
-        while (!self.operationla_regs.usbsts.hch) {
+        while (!self.operational_regs.usbsts.hch) {
             arch.relax();
         }
 
         // Reset
-        self.operationla_regs.usbcmd.hc_rst = true;
-        while (self.operationla_regs.usbcmd.hc_rst != false) {
+        self.operational_regs.usbcmd.hc_rst = true;
+        while (self.operational_regs.usbcmd.hc_rst != false) {
             arch.relax();
         }
-        while (self.operationla_regs.usbsts.cnr != false) {
+        while (self.operational_regs.usbsts.cnr != false) {
             arch.relax();
         }
     }
 
     /// Initialize the xHC.
     pub fn init(self: Self) void {
+        // Reset the controller.
         self.reset();
+
+        // Set the number of device contexts.
+        const max_slots = self.capability_regs.hcs_params1.maxslots;
+        self.operational_regs.config.max_slots_en = num_device_slots;
+        log.debug("Set the num of device contexts to {d} (max: {d})", .{ num_device_slots, max_slots });
     }
 };
