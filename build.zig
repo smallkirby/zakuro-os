@@ -138,7 +138,7 @@ pub fn build(b: *std.Build) void {
     // Declare a test step.
     {
         const root_unit_tests = b.addTest(.{
-            .root_source_file = b.path("kernel/test.zig"),
+            .root_source_file = b.path("kernel/main.zig"),
             .target = target,
             .optimize = optimize,
         });
