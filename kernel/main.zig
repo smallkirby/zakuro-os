@@ -100,7 +100,7 @@ export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) n
     const xhc_mmio_base = (@as(u64, bar1) << 32) | @as(u64, bar0 & ~@as(u32, 0b1111));
     log.info("xHC MMIO base: 0x{X}", .{xhc_mmio_base});
 
-    const controller = drivers.xhc.Controller.new(xhc_mmio_base);
+    var controller = drivers.xhc.Controller.new(xhc_mmio_base);
     controller.init();
 
     // EOL

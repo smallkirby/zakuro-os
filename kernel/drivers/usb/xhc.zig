@@ -4,8 +4,14 @@ const std = @import("std");
 const zakuro = @import("zakuro");
 const log = std.log.scoped(.xhci);
 const arch = zakuro.arch;
+const context = @import("context.zig");
+const DeviceContext = context.DeviceContext;
 
+/// Maximum number of device slots supported by this driver.
 const num_device_slots = 8;
+/// Buffer for device contexts.
+/// TODO: replace this with a more dynamic allocation, then remove this global var.
+var device_contexts: [num_device_slots + 1]DeviceContext = undefined;
 
 /// xHCI Capability Registers.
 const CapabilityRegisters = packed struct {
@@ -172,6 +178,12 @@ pub const Controller = struct {
     /// Doorbell Registers.
     doorbell_regs: *volatile [256]DoorbellRegister,
 
+    /// Device contexts.
+    device_contexts: *[num_device_slots]DeviceContext,
+    /// DCBAA: Device Context Base Address Array.
+    /// TODO: should be dynamically allocated
+    dcbaa: [num_device_slots + 1]u64 = undefined,
+
     const Self = @This();
 
     /// Instantiate new handler of the xHC.
@@ -191,6 +203,7 @@ pub const Controller = struct {
             .operational_regs = operational_regs,
             .runtime_regs = runtime_regs,
             .doorbell_regs = doorbell_regs,
+            .device_contexts = device_contexts[0..num_device_slots],
         };
     }
 
@@ -223,13 +236,24 @@ pub const Controller = struct {
     }
 
     /// Initialize the xHC.
-    pub fn init(self: Self) void {
+    pub fn init(self: *Self) void {
         // Reset the controller.
         self.reset();
 
         // Set the number of device contexts.
         const max_slots = self.capability_regs.hcs_params1.maxslots;
+        if (max_slots <= num_device_slots) {
+            @panic("xHC does not support the required number of device slots");
+        }
         self.operational_regs.config.max_slots_en = num_device_slots;
         log.debug("Set the num of device contexts to {d} (max: {d})", .{ num_device_slots, max_slots });
+
+        // Clear DCBAA
+        for (0..num_device_slots + 1) |i| {
+            self.dcbaa[i] = 0;
+        }
+
+        // Set DCBAAP
+        self.operational_regs.dcbaap = @intFromPtr(&self.dcbaa);
     }
 };
