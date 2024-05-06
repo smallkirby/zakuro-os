@@ -19,9 +19,6 @@ const num_device_slots = 8;
 /// Buffer for device contexts.
 /// TODO: replace this with a more dynamic allocation, then remove this global var.
 var device_contexts: [num_device_slots + 1]DeviceContext = undefined;
-/// Buffer for DCBAA.
-/// TODO: replace this with a more dynamic allocation, then remove this global var.
-var dcbaa: [num_device_slots + 1]u64 = undefined;
 
 /// Buffer used by fixed-size allocator.
 /// TODO: use kernel allocator whin it's ready.
@@ -308,7 +305,7 @@ pub const Controller = struct {
     device_contexts: *[num_device_slots]DeviceContext = undefined,
     /// DCBAA: Device Context Base Address Array.
     /// TODO: should be dynamically allocated
-    dcbaa: *[num_device_slots + 1]u64 = undefined,
+    dcbaa: []u64 = undefined,
 
     /// Fixed-size allocator.
     /// TODO: use kernel allocator when it's ready.
@@ -333,6 +330,10 @@ pub const Controller = struct {
         log.debug("xHC Doorbell Registers @ {X:0>16}", .{@intFromPtr(doorbell_regs)});
 
         const allocator = fsa.allocator();
+        const dcbaa = allocator.alignedAlloc(u64, 0x100, num_device_slots + 1) catch |err| {
+            log.err("Failed to allocate DCBAA: {?}", .{err});
+            @panic("Failed to allocate DCBAA");
+        };
 
         return Self{
             .mmio_base = mmio_base,
@@ -341,7 +342,7 @@ pub const Controller = struct {
             .runtime_regs = runtime_regs,
             .doorbell_regs = doorbell_regs,
             .device_contexts = device_contexts[0..num_device_slots],
-            .dcbaa = dcbaa[0 .. num_device_slots + 1],
+            .dcbaa = dcbaa,
             .cmd_ring = ring.Ring{},
             .event_ring = ring.EventRing{},
             .allocator = allocator,
@@ -396,7 +397,11 @@ pub const Controller = struct {
 
         // Set DCBAAP
         // TODO: DCBAAP should be aligned?
-        self.operational_regs.dcbaap = @intFromPtr(&self.dcbaa) & ~@as(u64, 0b11111);
+        if ((@intFromPtr(self.dcbaa.ptr) & 0b111111) != 0) {
+            @panic("DCBAAP is not aligned");
+        }
+        self.operational_regs.dcbaap = @intFromPtr(self.dcbaa.ptr) & ~@as(u64, 0b111111);
+        log.debug("DCBAAP Set to: {X:0>16}", .{self.operational_regs.dcbaap});
 
         const num_trbs = 32;
 
@@ -405,6 +410,7 @@ pub const Controller = struct {
             log.err("Failed to allocate TRBs for Command Ring: {?}", .{err});
             return XhcError.NoMemory;
         };
+        log.debug("Command Ring TRBs @ {X:0>16}", .{@intFromPtr(self.cmd_ring.trbs.ptr)});
         @memset(@as([*]u8, @ptrCast(self.cmd_ring.trbs.ptr))[0 .. num_trbs * @sizeOf(Trb)], 0);
         self.operational_regs.crcr = @intFromPtr(self.cmd_ring.trbs.ptr) | @as(u64, @intCast(self.cmd_ring.pcs));
 
@@ -415,12 +421,14 @@ pub const Controller = struct {
             log.err("Failed to allocate TRBs for Event Ring: {?}", .{err});
             return XhcError.NoMemory;
         };
+        log.debug("Event Ring TRBs @ {X:0>16}", .{@intFromPtr(self.event_ring.trbs.ptr)});
         @memset(@as([*]u8, @ptrCast(self.event_ring.trbs.ptr))[0 .. num_trbs * @sizeOf(Trb)], 0);
 
         self.event_ring.erst = self.allocator.alignedAlloc(ring.EventRingSegmentTableEntry, 4096, 1) catch |err| {
             log.err("Failed to allocate ERST for Event Ring: {?}", .{err});
             return XhcError.NoMemory;
         };
+        log.debug("Event Ring ERST @ {X:0>16}", .{@intFromPtr(self.event_ring.erst.ptr)});
         @memset(@as([*]u8, @ptrCast(self.event_ring.erst.ptr))[0 .. 1 * @sizeOf(ring.EventRingSegmentTableEntry)], 0);
         self.event_ring.erst[0].ring_segment_base_addr = @intFromPtr(self.event_ring.trbs.ptr);
         self.event_ring.erst[0].size = num_trbs;
