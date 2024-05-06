@@ -137,15 +137,26 @@ pub fn build(b: *std.Build) void {
 
     // Declare a test step.
     {
-        const exe_unit_tests = b.addTest(.{
+        const root_unit_tests = b.addTest(.{
             .root_source_file = b.path("kernel/test.zig"),
             .target = target,
             .optimize = optimize,
         });
-        exe_unit_tests.addObjectFile(makefont_output);
-        exe_unit_tests.root_module.addImport("zakuro", zakuro);
-        const run_exe_unit_tests = b.addRunArtifact(exe_unit_tests);
+        root_unit_tests.addObjectFile(makefont_output);
+        root_unit_tests.root_module.addImport("zakuro", zakuro);
+
+        const zakuro_unit_tests = b.addTest(.{
+            .root_source_file = b.path("kernel/zakuro.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        zakuro_unit_tests.root_module.addImport("zakuro", &zakuro_unit_tests.root_module);
+        zakuro_unit_tests.addObjectFile(makefont_output);
+
+        const run_exe_unit_tests = b.addRunArtifact(root_unit_tests);
+        const run_zakuro_unit_tests = b.addRunArtifact(zakuro_unit_tests);
         const test_step = b.step("test", "Run unit tests");
         test_step.dependOn(&run_exe_unit_tests.step);
+        test_step.dependOn(&run_zakuro_unit_tests.step);
     }
 }

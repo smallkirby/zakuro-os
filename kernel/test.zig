@@ -1,6 +1,6 @@
 pub const zakuro = @import("zakuro");
 
-comptime {
+test {
     const testing = @import("std").testing;
     testing.refAllDeclsRecursive(zakuro);
 }
