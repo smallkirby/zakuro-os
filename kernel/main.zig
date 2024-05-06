@@ -94,19 +94,30 @@ export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) n
             }
         }
     }
-    const xhc = xhc_maybe orelse @panic("xHC controller not found.");
-    const bar0 = xhc.device.readBar(xhc.function, 0);
-    const bar1 = xhc.device.readBar(xhc.function, 1);
+    const xhc_dev = xhc_maybe orelse @panic("xHC controller not found.");
+    const bar0 = xhc_dev.device.readBar(xhc_dev.function, 0);
+    const bar1 = xhc_dev.device.readBar(xhc_dev.function, 1);
     const xhc_mmio_base = (@as(u64, bar1) << 32) | @as(u64, bar0 & ~@as(u32, 0b1111));
     log.info("xHC MMIO base: 0x{X}", .{xhc_mmio_base});
 
-    var controller = drivers.xhc.Controller.new(xhc_mmio_base);
-    controller.init() catch |err| {
+    // Initialize xHC controller.
+    var xhc = drivers.xhc.Controller.new(xhc_mmio_base);
+    xhc.init() catch |err| {
         log.err("Failed to initialize xHC controller: {?}", .{err});
         unreachable;
     };
-    controller.run();
+    xhc.run();
     log.info("Started xHC controller.", .{});
+
+    // Find available devices
+    const max_ports = xhc.capability_regs.hcs_params1.maxports;
+    log.debug("Max port number: {d}", .{max_ports});
+    for (0..max_ports - 1) |i| {
+        const port = xhc.getPortAt(i);
+        if (port.isConnected()) {
+            log.debug("Port {d} is connected.", .{i});
+        }
+    }
 
     // EOL
     log.info("Reached end of kernel. Halting...", .{});

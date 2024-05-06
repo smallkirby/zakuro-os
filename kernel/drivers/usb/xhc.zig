@@ -6,6 +6,7 @@ const log = std.log.scoped(.xhci);
 const arch = zakuro.arch;
 const context = @import("context.zig");
 const ring = @import("ring.zig");
+const port = @import("port.zig");
 const Trb = @import("trb.zig").Trb;
 const DeviceContext = context.DeviceContext;
 
@@ -53,6 +54,7 @@ const CapabilityRegisters = packed struct {
 };
 
 /// xHC Operational Registers.
+/// Actually, Port Register Set continues at offset 0x400, but we don't declare them here.
 const OperationalRegisters = packed struct {
     /// USB Command.
     usbcmd: CommandRegister,
@@ -72,6 +74,69 @@ const OperationalRegisters = packed struct {
     dcbaap: u64,
     /// Configure.
     config: ConfigureRegister,
+};
+
+pub const PortRegisterSet = packed struct(u128) {
+    /// Port Status and Control.
+    portsc: PortStatusControlRegister,
+    /// Port Power Management Status and Control.
+    portpmsc: u32,
+    /// Port Link Info.
+    portli: u32,
+    /// Port Hardware LPM Control.
+    porthlpmc: u32,
+};
+
+/// PORTSC. Can be used to determine how many ports need to be serviced.
+const PortStatusControlRegister = packed struct(u32) {
+    /// Current Connect Status.
+    ccs: bool,
+    /// Port Enabled/Disabled.
+    ped: bool,
+    /// Reserved.
+    _reserved1: u1,
+    /// Over-current Active.
+    oca: bool,
+    /// Port Reset.
+    pr: bool,
+    /// Port Link State.
+    pls: u4,
+    /// Port Power.
+    pp: bool,
+    /// Port Speed.
+    speed: u4,
+    /// Port Indicator Control.
+    pic: u2,
+    /// Port Link State Write Strobe.
+    lws: bool,
+    /// Connect Status Change.
+    csc: bool,
+    /// Port Enabled/Disabled Change.
+    pec: bool,
+    /// Warm Port Reset Change.
+    wrc: bool,
+    /// Over-current Change.
+    occ: bool,
+    /// Port Reset Change.
+    prc: bool,
+    /// Port Link State Change.
+    plc: bool,
+    /// Port Config Error Change.
+    cec: bool,
+    /// Cold Attach Status.
+    cas: bool,
+    /// Wake on Connect Enable.
+    wce: bool,
+    /// Wake on Disconnect Enable.
+    wde: bool,
+    /// Wake on Over-current Enable.
+    woe: bool,
+    /// Reserved.
+    _reserved2: u2,
+    /// Device Removable.
+    dr: bool,
+    /// Warm Port Reset.
+    wpr: bool,
 };
 
 /// USB Command Register. (USBCMD)
@@ -291,10 +356,10 @@ pub const Controller = struct {
         cmd.inte = false;
         cmd.hsee = false;
         cmd.ewe = false;
-        if (!self.operational_regs.usbsts.hch) {
-            cmd.rs = false;
-        }
         self.operational_regs.usbcmd = cmd;
+        if (!self.operational_regs.usbsts.hch) {
+            self.operational_regs.usbcmd.rs = false;
+        }
 
         // Wait for the controller to stop.
         while (!self.operational_regs.usbsts.hch) {
@@ -303,10 +368,10 @@ pub const Controller = struct {
 
         // Reset
         self.operational_regs.usbcmd.hc_rst = true;
-        while (self.operational_regs.usbcmd.hc_rst != false) {
+        while (self.operational_regs.usbcmd.hc_rst) {
             arch.relax();
         }
-        while (self.operational_regs.usbsts.cnr != false) {
+        while (self.operational_regs.usbsts.cnr) {
             arch.relax();
         }
     }
@@ -331,7 +396,7 @@ pub const Controller = struct {
 
         // Set DCBAAP
         // TODO: DCBAAP should be aligned?
-        self.operational_regs.dcbaap = @intFromPtr(&self.dcbaa);
+        self.operational_regs.dcbaap = @intFromPtr(&self.dcbaa) & ~@as(u64, 0b11111);
 
         const num_trbs = 32;
 
@@ -340,7 +405,7 @@ pub const Controller = struct {
             log.err("Failed to allocate TRBs for Command Ring: {?}", .{err});
             return XhcError.NoMemory;
         };
-        @memset(@as([*]u8, @ptrCast(self.cmd_ring.trbs.ptr))[0..num_trbs], 0);
+        @memset(@as([*]u8, @ptrCast(self.cmd_ring.trbs.ptr))[0 .. num_trbs * @sizeOf(Trb)], 0);
         self.operational_regs.crcr = @intFromPtr(self.cmd_ring.trbs.ptr) | @as(u64, @intCast(self.cmd_ring.pcs));
 
         // Create TRB and ERST for Event Ring and set the ring to primary interrupter.
@@ -350,25 +415,31 @@ pub const Controller = struct {
             log.err("Failed to allocate TRBs for Event Ring: {?}", .{err});
             return XhcError.NoMemory;
         };
-        @memset(@as([*]u8, @ptrCast(self.event_ring.trbs.ptr))[0..num_trbs], 0);
+        @memset(@as([*]u8, @ptrCast(self.event_ring.trbs.ptr))[0 .. num_trbs * @sizeOf(Trb)], 0);
 
         self.event_ring.erst = self.allocator.alignedAlloc(ring.EventRingSegmentTableEntry, 4096, 1) catch |err| {
             log.err("Failed to allocate ERST for Event Ring: {?}", .{err});
             return XhcError.NoMemory;
         };
-        @memset(@as([*]u8, @ptrCast(self.event_ring.erst.ptr))[0..1], 0);
+        @memset(@as([*]u8, @ptrCast(self.event_ring.erst.ptr))[0 .. 1 * @sizeOf(ring.EventRingSegmentTableEntry)], 0);
         self.event_ring.erst[0].ring_segment_base_addr = @intFromPtr(self.event_ring.trbs.ptr);
         self.event_ring.erst[0].size = num_trbs;
+
         const primary_interrupter: *volatile InterrupterRegisterSet = self.getPrimaryInterrupter();
-        primary_interrupter.err.erstsz = 1;
-        primary_interrupter.err.erdp = (@intFromPtr(self.event_ring.trbs.ptr) & ~@as(u64, 0b111)) | (primary_interrupter.err.erdp & 0b111);
-        primary_interrupter.err.erstba = @intFromPtr(self.event_ring.erst.ptr);
+        var new_interrupter = primary_interrupter.*;
+        new_interrupter.err.erstsz = 1;
+        new_interrupter.err.erdp = (@intFromPtr(self.event_ring.trbs.ptr) & ~@as(u64, 0b111)) | (primary_interrupter.err.erdp & 0b111);
+        new_interrupter.err.erstba = @intFromPtr(self.event_ring.erst.ptr);
+        primary_interrupter.* = new_interrupter;
 
         // Enable interrupts
         // TODO: should write at once?
-        primary_interrupter.imod.imodi = 4000;
-        primary_interrupter.iman.ip = true;
-        primary_interrupter.iman.ie = true;
+        new_interrupter = primary_interrupter.*;
+        new_interrupter.imod.imodi = 4000;
+        new_interrupter.iman.ip = true;
+        new_interrupter.iman.ie = true;
+        primary_interrupter.* = new_interrupter;
+
         self.operational_regs.usbcmd.inte = true;
     }
 
@@ -390,5 +461,17 @@ pub const Controller = struct {
     /// Get the pointer to the primary interrupter.
     fn getPrimaryInterrupter(self: Self) *volatile InterrupterRegisterSet {
         return &self.getInterrupterRegisterSet()[0];
+    }
+
+    /// Get the multi-items pointers of Port Register Set.
+    fn getPortRegisterSet(self: Self) [*]PortRegisterSet {
+        const ptr = @as(u64, @intFromPtr(self.operational_regs)) + 0x400;
+        return @ptrFromInt(ptr);
+    }
+
+    /// Get the pointer to the Port Register Set at the specified index.
+    pub fn getPortAt(self: *Self, index: usize) port.Port {
+        const prs = &self.getPortRegisterSet()[index];
+        return port.Port.new(index, prs);
     }
 };
