@@ -187,9 +187,9 @@ const StructuralParameters1 = packed struct(u32) {
 /// Interrupt Register Set in the xHC's Runtime Registers.
 const InterrupterRegisterSet = packed struct(u256) {
     /// Interrupter Management Register.
-    iman: u32,
-    /// Interrupter Management Register.
-    imod: u32,
+    iman: InterrupterManagementRegister,
+    /// Interrupter Moderation Register.
+    imod: InterrupterModerationRegister,
     /// Event Ring Register.
     err: EventRingRegister,
 };
@@ -205,6 +205,24 @@ const EventRingRegister = packed struct(u192) {
     /// Event Ring Dequeue Pointer Register.
     /// TODO: 3 LSBs are used as DESI and EHB.
     erdp: u64,
+};
+
+/// Interrupter Management Register (IMAN) that allows system software to enable, disable, and detect xHC interrupts.
+const InterrupterManagementRegister = packed struct(u32) {
+    /// Interrupt Pending (IP)
+    ip: bool,
+    /// Interrupt Enable (IE)
+    ie: bool,
+    /// Reserved.
+    _reserved: u30,
+};
+
+/// Interrupter Moderation Register (IMOD) that controls the moderation feature of an Interrupter.
+const InterrupterModerationRegister = packed struct(u32) {
+    /// Interrupter Moderation Interval, in 250ns increments (IMODI).
+    imodi: u16,
+    /// Reserved.
+    _reserved: u16,
 };
 
 /// xHC Host Controller
@@ -228,7 +246,7 @@ pub const Controller = struct {
     dcbaa: *[num_device_slots + 1]u64 = undefined,
 
     /// Fixed-size allocator.
-    /// TODO: use kernel allocator whin it's ready.
+    /// TODO: use kernel allocator when it's ready.
     allocator: std.mem.Allocator,
 
     /// Comamnd Ring.
@@ -341,10 +359,17 @@ pub const Controller = struct {
         @memset(@as([*]u8, @ptrCast(self.event_ring.erst.ptr))[0..1], 0);
         self.event_ring.erst[0].ring_segment_base_addr = @intFromPtr(self.event_ring.trbs.ptr);
         self.event_ring.erst[0].size = num_trbs;
-        const primary_interrupter = self.getPrimaryInterrupter();
+        const primary_interrupter: *volatile InterrupterRegisterSet = self.getPrimaryInterrupter();
         primary_interrupter.err.erstsz = 1;
         primary_interrupter.err.erdp = (@intFromPtr(self.event_ring.trbs.ptr) & ~@as(u64, 0b111)) | (primary_interrupter.err.erdp & 0b111);
         primary_interrupter.err.erstba = @intFromPtr(self.event_ring.erst.ptr);
+
+        // Enable interrupts
+        // TODO: should write at once?
+        primary_interrupter.imod.imodi = 4000;
+        primary_interrupter.iman.ip = true;
+        primary_interrupter.iman.ie = true;
+        self.operational_regs.usbcmd.inte = true;
     }
 
     /// Get the array of interrupter registers in the xHC's Runtime Registers.
