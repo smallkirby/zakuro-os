@@ -185,6 +185,15 @@ pub const Controller = struct {
         while (!self.operationla_regs.usbsts.hch) {
             arch.relax();
         }
+
+        // Reset
+        self.operationla_regs.usbcmd.hc_rst = true;
+        while (self.operationla_regs.usbcmd.hc_rst != false) {
+            arch.relax();
+        }
+        while (self.operationla_regs.usbsts.cnr != false) {
+            arch.relax();
+        }
     }
 
     /// Initialize the xHC.
