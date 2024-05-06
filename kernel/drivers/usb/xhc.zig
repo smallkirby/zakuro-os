@@ -372,6 +372,15 @@ pub const Controller = struct {
         self.operational_regs.usbcmd.inte = true;
     }
 
+    /// Start running the xHC.
+    pub fn run(self: *Self) void {
+        self.operational_regs.usbcmd.rs = true;
+
+        while (self.operational_regs.usbsts.hch) {
+            arch.relax();
+        }
+    }
+
     /// Get the array of interrupter registers in the xHC's Runtime Registers.
     fn getInterrupterRegisterSet(self: Self) *volatile [256]InterrupterRegisterSet {
         const ptr = @as(u64, @intFromPtr(self.runtime_regs)) + @sizeOf(RuntimeRegisters);

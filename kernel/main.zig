@@ -105,6 +105,8 @@ export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) n
         log.err("Failed to initialize xHC controller: {?}", .{err});
         unreachable;
     };
+    controller.run();
+    log.info("Started xHC controller.", .{});
 
     // EOL
     log.info("Reached end of kernel. Halting...", .{});
