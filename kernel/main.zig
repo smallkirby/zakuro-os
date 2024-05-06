@@ -101,7 +101,10 @@ export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) n
     log.info("xHC MMIO base: 0x{X}", .{xhc_mmio_base});
 
     var controller = drivers.xhc.Controller.new(xhc_mmio_base);
-    controller.init();
+    controller.init() catch |err| {
+        log.err("Failed to initialize xHC controller: {?}", .{err});
+        unreachable;
+    };
 
     // EOL
     log.info("Reached end of kernel. Halting...", .{});

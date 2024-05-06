@@ -5,13 +5,26 @@ const zakuro = @import("zakuro");
 const log = std.log.scoped(.xhci);
 const arch = zakuro.arch;
 const context = @import("context.zig");
+const ring = @import("ring.zig");
+const Trb = @import("trb.zig").Trb;
 const DeviceContext = context.DeviceContext;
+
+pub const XhcError = error{
+    NoMemory,
+};
 
 /// Maximum number of device slots supported by this driver.
 const num_device_slots = 8;
 /// Buffer for device contexts.
 /// TODO: replace this with a more dynamic allocation, then remove this global var.
 var device_contexts: [num_device_slots + 1]DeviceContext = undefined;
+/// Buffer for DCBAA.
+/// TODO: replace this with a more dynamic allocation, then remove this global var.
+var dcbaa: [num_device_slots + 1]u64 = undefined;
+
+/// Buffer used by fixed-size allocator.
+/// TODO: use kernel allocator whin it's ready.
+var general_buf: [4096 * 100]u8 = undefined;
 
 /// xHCI Capability Registers.
 const CapabilityRegisters = packed struct {
@@ -179,10 +192,19 @@ pub const Controller = struct {
     doorbell_regs: *volatile [256]DoorbellRegister,
 
     /// Device contexts.
-    device_contexts: *[num_device_slots]DeviceContext,
+    device_contexts: *[num_device_slots]DeviceContext = undefined,
     /// DCBAA: Device Context Base Address Array.
     /// TODO: should be dynamically allocated
-    dcbaa: [num_device_slots + 1]u64 = undefined,
+    dcbaa: *[num_device_slots + 1]u64 = undefined,
+
+    /// Fixed-size allocator.
+    /// TODO: use kernel allocator whin it's ready.
+    allocator: std.mem.Allocator,
+
+    /// Comamnd Ring.
+    cmd_ring: ring.Ring,
+    /// Event Ring.
+    event_ring: ring.EventRing,
 
     const Self = @This();
 
@@ -197,6 +219,9 @@ pub const Controller = struct {
         log.debug("xHC Runtime Registers @ {X:0>16}", .{@intFromPtr(runtime_regs)});
         log.debug("xHC Doorbell Registers @ {X:0>16}", .{@intFromPtr(doorbell_regs)});
 
+        var fsa = std.heap.FixedBufferAllocator.init(&general_buf);
+        const allocator = fsa.allocator();
+
         return Self{
             .mmio_base = mmio_base,
             .capability_regs = capability_regs,
@@ -204,6 +229,10 @@ pub const Controller = struct {
             .runtime_regs = runtime_regs,
             .doorbell_regs = doorbell_regs,
             .device_contexts = device_contexts[0..num_device_slots],
+            .dcbaa = dcbaa[0 .. num_device_slots + 1],
+            .cmd_ring = ring.Ring{},
+            .event_ring = ring.EventRing{},
+            .allocator = allocator,
         };
     }
 
@@ -236,7 +265,7 @@ pub const Controller = struct {
     }
 
     /// Initialize the xHC.
-    pub fn init(self: *Self) void {
+    pub fn init(self: *Self) XhcError!void {
         // Reset the controller.
         self.reset();
 
@@ -254,6 +283,17 @@ pub const Controller = struct {
         }
 
         // Set DCBAAP
+        // TODO: DCBAAP should be aligned?
         self.operational_regs.dcbaap = @intFromPtr(&self.dcbaa);
+        log.debug("DCBAAP: {X:0>16}", .{@intFromPtr(&self.dcbaa)});
+
+        // Create TRB for Command Ring and set the ring to CRCR.
+        // TODO: remove magic number
+        self.cmd_ring.trbs = self.allocator.alloc(Trb, 32) catch |err| {
+            log.err("Failed to allocate TRBs for Command Ring: {?}", .{err});
+            return XhcError.NoMemory;
+        };
+        @memset(@as([*]u8, @ptrCast(self.cmd_ring.trbs.ptr))[0..32], 0);
+        self.operational_regs.crcr = @intFromPtr(self.cmd_ring.trbs.ptr) | @as(u64, @intCast(self.cmd_ring.pcs));
     }
 };
