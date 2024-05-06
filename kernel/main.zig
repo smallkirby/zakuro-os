@@ -9,6 +9,7 @@ const ser = zakuro.serial;
 const graphics = zakuro.graphics;
 const color = zakuro.color;
 const pci = zakuro.pci;
+const drivers = zakuro.drivers;
 
 /// Override panic impl
 pub const panic = @import("panic.zig").panic_fn;
@@ -96,8 +97,11 @@ export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) n
     const xhc = xhc_maybe orelse @panic("xHC controller not found.");
     const bar0 = xhc.device.readBar(xhc.function, 0);
     const bar1 = xhc.device.readBar(xhc.function, 1);
-    const xhc_mmio_base: [*]u32 = @ptrFromInt((@as(u64, bar1) << 32) | @as(u64, bar0));
-    log.info("xHC MMIO base: 0x{X}", .{@intFromPtr(xhc_mmio_base)});
+    const xhc_mmio_base = (@as(u64, bar1) << 32) | @as(u64, bar0 & ~@as(u32, 0b1111));
+    log.info("xHC MMIO base: 0x{X}", .{xhc_mmio_base});
+
+    const controller = drivers.xhc.Controller.new(xhc_mmio_base);
+    controller.init();
 
     // EOL
     log.info("Reached end of kernel. Halting...", .{});

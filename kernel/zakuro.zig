@@ -8,3 +8,10 @@ pub const graphics = @import("graphics.zig");
 pub const color = @import("color.zig");
 pub const arch = @import("arch.zig").impl;
 pub const font = @import("font.zig");
+pub const drivers = @import("drivers.zig");
+
+test "test" {
+    const testing = @import("std").testing;
+    try testing.expect(false);
+    testing.refAllDecls(@This());
+}

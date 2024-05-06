@@ -124,7 +124,7 @@ pub const PixelWriter = struct {
         color: PixelColor,
     ) void {
         for (0..size.x) |dx| {
-            self.writePixel(size.x + dx, pos.y, color);
+            self.writePixel(size.x + @as(u32, @truncate(dx)), pos.y, color);
         }
     }
 

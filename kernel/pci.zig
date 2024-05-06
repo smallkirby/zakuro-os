@@ -360,4 +360,5 @@ test "ConfigAddress cast" {
 
     try expectEqual(0b1_0000000_10001011_11010_101_00100000, addr.as_u32());
     try expectEqual(addr, ConfigAddress.from_u32(addr.as_u32()));
+    try expectEqual(true, false);
 }

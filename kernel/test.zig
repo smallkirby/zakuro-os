@@ -1,6 +1,6 @@
-comptime {
-    _ = @import("pci.zig");
-    _ = @import("main.zig");
+pub const zakuro = @import("zakuro");
 
-    @import("std").testing.refAllDecls(@This());
+comptime {
+    const testing = @import("std").testing;
+    testing.refAllDeclsRecursive(zakuro);
 }

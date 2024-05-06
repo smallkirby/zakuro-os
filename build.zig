@@ -85,14 +85,15 @@ pub fn build(b: *std.Build) void {
         run_clint_step.dependOn(&run_clint_cmd.step);
     }
 
+    // Zakuro module
+    const zakuro = b.createModule(.{
+        .root_source_file = b.path("kernel/zakuro.zig"),
+    });
+    zakuro.addImport("zakuro", zakuro);
+
     // Main binary
     var kernel: *std.Build.Step.Compile = undefined;
     {
-        const zakuro = b.createModule(.{
-            .root_source_file = b.path("kernel/zakuro.zig"),
-        });
-        zakuro.addImport("zakuro", zakuro);
-
         kernel = b.addExecutable(.{
             .name = "kernel.elf",
             .root_source_file = b.path("kernel/main.zig"),
@@ -142,6 +143,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         });
         exe_unit_tests.addObjectFile(makefont_output);
+        exe_unit_tests.root_module.addImport("zakuro", zakuro);
         const run_exe_unit_tests = b.addRunArtifact(exe_unit_tests);
         const test_step = b.step("test", "Run unit tests");
         test_step.dependOn(&run_exe_unit_tests.step);
