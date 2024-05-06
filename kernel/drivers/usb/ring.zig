@@ -22,6 +22,19 @@ pub const EventRing = struct {
     pcs: u1 = 1,
     /// Next index to write to.
     index: usize = 0,
+    /// Event Ring Segment Table.
+    erst: []EventRingSegmentTableEntry = undefined,
 
     // TODO
+};
+
+/// Entry in ESRT. ESRT is used to define multi-segment Event Rings,
+/// which enables runtime expansion and shrinking of the Event Ring.
+pub const EventRingSegmentTableEntry = packed struct(u128) {
+    /// Base address of the Event Ring Segment.
+    ring_segment_base_addr: u64,
+    /// Size of the Event Ring Segment.
+    size: u16,
+    /// Reserved.
+    _reserved: u48,
 };

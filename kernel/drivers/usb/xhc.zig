@@ -24,7 +24,9 @@ var dcbaa: [num_device_slots + 1]u64 = undefined;
 
 /// Buffer used by fixed-size allocator.
 /// TODO: use kernel allocator whin it's ready.
-var general_buf: [4096 * 100]u8 = undefined;
+var general_buf = [_]u8{0} ** (4096 * 10);
+/// TODO: use kernel allocator whin it's ready.
+var fsa = std.heap.FixedBufferAllocator.init(&general_buf);
 
 /// xHCI Capability Registers.
 const CapabilityRegisters = packed struct {
@@ -151,8 +153,13 @@ const ConfigureRegister = packed struct(u32) {
 };
 
 /// xHC Runtime Registers.
-const RuntimeRegisters = packed struct {
-    // TODO
+/// Actually, 1024 entries of Interrupter Register Set continues after this,
+/// but we don't declare them here.
+const RuntimeRegisters = packed struct(u256) {
+    /// MFINDEX
+    mfindex: u32,
+    /// Reserved.
+    _reserved: u224,
 };
 
 /// xHC Doorbell Register.
@@ -175,6 +182,29 @@ const StructuralParameters1 = packed struct(u32) {
     _reserved: u5,
     /// Number of ports.
     maxports: u8,
+};
+
+/// Interrupt Register Set in the xHC's Runtime Registers.
+const InterrupterRegisterSet = packed struct(u256) {
+    /// Interrupter Management Register.
+    iman: u32,
+    /// Interrupter Management Register.
+    imod: u32,
+    /// Event Ring Register.
+    err: EventRingRegister,
+};
+
+/// Event Ring Register.
+const EventRingRegister = packed struct(u192) {
+    /// Event Ring Segment Table Size Register.
+    erstsz: u32,
+    /// Reserved.
+    _reserved: u32,
+    /// Event Ring Segment Table Base Address Register.
+    erstba: u64,
+    /// Event Ring Dequeue Pointer Register.
+    /// TODO: 3 LSBs are used as DESI and EHB.
+    erdp: u64,
 };
 
 /// xHC Host Controller
@@ -219,7 +249,6 @@ pub const Controller = struct {
         log.debug("xHC Runtime Registers @ {X:0>16}", .{@intFromPtr(runtime_regs)});
         log.debug("xHC Doorbell Registers @ {X:0>16}", .{@intFromPtr(doorbell_regs)});
 
-        var fsa = std.heap.FixedBufferAllocator.init(&general_buf);
         const allocator = fsa.allocator();
 
         return Self{
@@ -285,15 +314,47 @@ pub const Controller = struct {
         // Set DCBAAP
         // TODO: DCBAAP should be aligned?
         self.operational_regs.dcbaap = @intFromPtr(&self.dcbaa);
-        log.debug("DCBAAP: {X:0>16}", .{@intFromPtr(&self.dcbaa)});
+
+        const num_trbs = 32;
 
         // Create TRB for Command Ring and set the ring to CRCR.
-        // TODO: remove magic number
-        self.cmd_ring.trbs = self.allocator.alloc(Trb, 32) catch |err| {
+        self.cmd_ring.trbs = self.allocator.alignedAlloc(Trb, 0x1000, num_trbs) catch |err| {
             log.err("Failed to allocate TRBs for Command Ring: {?}", .{err});
             return XhcError.NoMemory;
         };
-        @memset(@as([*]u8, @ptrCast(self.cmd_ring.trbs.ptr))[0..32], 0);
+        @memset(@as([*]u8, @ptrCast(self.cmd_ring.trbs.ptr))[0..num_trbs], 0);
         self.operational_regs.crcr = @intFromPtr(self.cmd_ring.trbs.ptr) | @as(u64, @intCast(self.cmd_ring.pcs));
+
+        // Create TRB and ERST for Event Ring and set the ring to primary interrupter.
+        // We prepare only the primary interrupter.
+        // We use only one segment here.
+        self.event_ring.trbs = self.allocator.alignedAlloc(Trb, 4096, num_trbs) catch |err| {
+            log.err("Failed to allocate TRBs for Event Ring: {?}", .{err});
+            return XhcError.NoMemory;
+        };
+        @memset(@as([*]u8, @ptrCast(self.event_ring.trbs.ptr))[0..num_trbs], 0);
+
+        self.event_ring.erst = self.allocator.alignedAlloc(ring.EventRingSegmentTableEntry, 4096, 1) catch |err| {
+            log.err("Failed to allocate ERST for Event Ring: {?}", .{err});
+            return XhcError.NoMemory;
+        };
+        @memset(@as([*]u8, @ptrCast(self.event_ring.erst.ptr))[0..1], 0);
+        self.event_ring.erst[0].ring_segment_base_addr = @intFromPtr(self.event_ring.trbs.ptr);
+        self.event_ring.erst[0].size = num_trbs;
+        const primary_interrupter = self.getPrimaryInterrupter();
+        primary_interrupter.err.erstsz = 1;
+        primary_interrupter.err.erdp = (@intFromPtr(self.event_ring.trbs.ptr) & ~@as(u64, 0b111)) | (primary_interrupter.err.erdp & 0b111);
+        primary_interrupter.err.erstba = @intFromPtr(self.event_ring.erst.ptr);
+    }
+
+    /// Get the array of interrupter registers in the xHC's Runtime Registers.
+    fn getInterrupterRegisterSet(self: Self) *volatile [256]InterrupterRegisterSet {
+        const ptr = @as(u64, @intFromPtr(self.runtime_regs)) + @sizeOf(RuntimeRegisters);
+        return @ptrFromInt(ptr);
+    }
+
+    /// Get the pointer to the primary interrupter.
+    fn getPrimaryInterrupter(self: Self) *volatile InterrupterRegisterSet {
+        return &self.getInterrupterRegisterSet()[0];
     }
 };
