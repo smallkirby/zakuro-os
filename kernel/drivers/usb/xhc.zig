@@ -322,7 +322,7 @@ pub const Controller = struct {
     pub fn new(mmio_base: u64) Self {
         const capability_regs: *volatile CapabilityRegisters = @ptrFromInt(mmio_base);
         const operational_regs: *volatile OperationalRegisters = @ptrFromInt(mmio_base + capability_regs.cap_length);
-        const runtime_regs: *volatile RuntimeRegisters = @ptrFromInt(mmio_base + capability_regs.rtsoff);
+        const runtime_regs: *volatile RuntimeRegisters = @ptrFromInt(mmio_base + capability_regs.rtsoff & ~@as(u64, 0b11111));
         const doorbell_regs: *volatile [256]DoorbellRegister = @ptrFromInt(mmio_base + capability_regs.dboff);
         log.debug("xHC Capability Registers @ {X:0>16}", .{@intFromPtr(capability_regs)});
         log.debug("xHC Operational Registers @ {X:0>16}", .{@intFromPtr(operational_regs)});
@@ -334,6 +334,7 @@ pub const Controller = struct {
             log.err("Failed to allocate DCBAA: {?}", .{err});
             @panic("Failed to allocate DCBAA");
         };
+        @memset(@as([*]u8, @ptrCast(dcbaa.ptr))[0 .. (num_device_slots + 1) * @sizeOf(u64)], 0);
 
         return Self{
             .mmio_base = mmio_base,
