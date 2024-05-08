@@ -110,7 +110,7 @@ export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) n
     log.info("Started xHC controller.", .{});
 
     // Find available devices
-    const max_ports = xhc.capability_regs.hcs_params1.maxports;
+    const max_ports = xhc.capability_regs.hcs_params1.read().maxports;
     log.debug("Max port number: {d}", .{max_ports});
     for (0..max_ports - 1) |i| {
         const port = xhc.getPortAt(i);

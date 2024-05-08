@@ -1,6 +1,6 @@
 //! This file defines the interface for USB Ports.
 
-const PortRegisterSet = @import("xhc.zig").PortRegisterSet;
+const PortRegisterSet = @import("register.zig").PortRegisterSet;
 
 /// xHCI USB Port.
 pub const Port = struct {
