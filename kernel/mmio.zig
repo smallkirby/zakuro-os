@@ -3,6 +3,7 @@
 const std = @import("std");
 const assert = std.debug.assert;
 const mem = std.mem;
+const log = std.log.scoped(.mmio);
 
 /// Restrictions on the register access size.
 pub const AccessWidth = enum(u8) {
@@ -49,13 +50,10 @@ pub fn Register(
         /// Read the data from the underlying register with the correct access width.
         pub fn read(self: *volatile Self) T {
             var ret: T = mem.zeroes(T);
-            const ret_bytes = mem.asBytes(&ret);
-            var val = mem.asBytes(&self._data);
+            const ret_bytes: [*]volatile atype = @ptrCast(mem.asBytes(&ret));
+            const val: [*]volatile atype = @ptrCast(mem.asBytes(&self._data));
             for (0..len) |i| {
-                @memcpy(
-                    ret_bytes[i * asize .. (i + 1) * asize],
-                    val[i * asize .. (i + 1) * asize],
-                );
+                ret_bytes[i] = val[i];
             }
 
             return ret;
@@ -63,13 +61,10 @@ pub fn Register(
 
         /// Write the data to the underlying register with the correct access width.
         pub fn write(self: *volatile Self, value: T) void {
-            const bytes = mem.asBytes(&value);
-            var val = mem.asBytes(&self._data);
+            const bytes: [*]const volatile atype = @ptrCast(mem.asBytes(&value));
+            const val: [*]volatile atype = @ptrCast(mem.asBytes(&self._data));
             for (0..len) |i| {
-                @memcpy(
-                    val[i * asize .. (i + 1) * asize],
-                    bytes[i * asize .. (i + 1) * asize],
-                );
+                val[i] = bytes[i];
             }
         }
 

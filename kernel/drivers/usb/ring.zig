@@ -25,7 +25,7 @@ pub const EventRing = struct {
     /// Event Ring Segment Table.
     erst: []EventRingSegmentTableEntry = undefined,
 
-    // TODO
+    // TODO: unimplemented
 };
 
 /// Entry in ESRT. ESRT is used to define multi-segment Event Rings,

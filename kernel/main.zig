@@ -112,10 +112,10 @@ export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) n
     // Find available devices
     const max_ports = xhc.capability_regs.hcs_params1.read().maxports;
     log.debug("Max port number: {d}", .{max_ports});
-    for (0..max_ports - 1) |i| {
+    for (1..max_ports) |i| {
         const port = xhc.getPortAt(i);
         if (port.isConnected()) {
-            log.debug("Port {d} is connected.", .{i});
+            log.debug("USB Port {d} is connected.", .{i});
         }
     }
 

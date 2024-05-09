@@ -21,6 +21,6 @@ pub const Port = struct {
 
     /// Returns true if the port is connected.
     pub fn isConnected(self: Self) bool {
-        return self.prs.portsc.ccs;
+        return self.prs.portsc.read().ccs;
     }
 };

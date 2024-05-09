@@ -10,6 +10,7 @@ const port = @import("port.zig");
 const Trb = @import("trb.zig").Trb;
 const DeviceContext = context.DeviceContext;
 const Regs = @import("register.zig");
+const Register = zakuro.mmio.Register;
 
 pub const XhcError = error{
     NoMemory,
@@ -103,10 +104,9 @@ pub const Controller = struct {
         self.operational_regs.usbcmd.write(cmd);
 
         // Wait for the controller to stop.
-        // TODO XXX
-        //while (!self.operational_regs.usbsts.read().hch) {
-        //    arch.relax();
-        //}
+        while (!self.operational_regs.usbsts.read().hch) {
+            arch.relax();
+        }
 
         // Reset
         self.operational_regs.usbcmd.modify(.{
@@ -185,11 +185,14 @@ pub const Controller = struct {
         primary_interrupter.* = new_interrupter;
 
         // Enable interrupts
-        // TODO: should write at once?
         new_interrupter = primary_interrupter.*;
-        new_interrupter.imod.imodi = 4000;
-        new_interrupter.iman.ip = true;
-        new_interrupter.iman.ie = true;
+        new_interrupter.imod.modify(.{
+            .imodi = 4000,
+        });
+        new_interrupter.iman.modify(.{
+            .ip = true,
+            .ie = true,
+        });
         primary_interrupter.* = new_interrupter;
 
         self.operational_regs.usbcmd.modify(.{
@@ -226,8 +229,58 @@ pub const Controller = struct {
     }
 
     /// Get the pointer to the Port Register Set at the specified index.
-    pub fn getPortAt(self: *Self, index: usize) port.Port {
-        const prs = &self.getPortRegisterSet()[index];
-        return port.Port.new(index, prs);
+    /// Note that port_index is 1-origin.
+    pub fn getPortAt(self: *Self, port_index: usize) port.Port {
+        const prs = &self.getPortRegisterSet()[port_index - 1];
+        return port.Port.new(port_index, prs);
     }
 };
+
+////////////////////////////////////////
+
+const expectEqual = std.testing.expectEqual;
+
+test "xHC Controller Register Access" {
+    const allocator = std.heap.page_allocator;
+    const memory = try allocator.alloc(u8, 0x3000);
+    defer allocator.free(memory);
+    const base: u64 = @intFromPtr(memory.ptr);
+    try expectEqual(base & 0xFFF, 0);
+
+    const capability_regs: *volatile Regs.CapabilityRegisters = @ptrFromInt(base);
+    capability_regs.cap_length = 0x40;
+    capability_regs.rtsoff = 0x1000;
+    capability_regs.dboff = 0x2000;
+    const operational_regs: *volatile Regs.OperationalRegisters = @ptrFromInt(base + capability_regs.cap_length);
+    const runtime_regs: *volatile Regs.RuntimeRegisters = @ptrFromInt(base + capability_regs.rtsoff & ~@as(u64, 0b11111));
+
+    // Test register addresses
+    var hc = Controller.new(@intFromPtr(memory.ptr));
+    try expectEqual(capability_regs, hc.capability_regs);
+    try expectEqual(operational_regs, hc.operational_regs);
+    try expectEqual(runtime_regs, hc.runtime_regs);
+
+    // Test USB Command Register
+    hc.operational_regs.usbcmd._data.css = true;
+    hc.operational_regs.usbcmd._data.hc_rst = true;
+    hc.operational_regs.usbcmd._data.rs = false;
+    hc.operational_regs.usbcmd._data.inte = true;
+    const cmd = hc.operational_regs.usbcmd.read();
+    try expectEqual(cmd.css, true);
+    try expectEqual(cmd.hc_rst, true);
+    try expectEqual(cmd.rs, false);
+    try expectEqual(cmd.inte, true);
+
+    // Test USB Status Register
+    hc.operational_regs.usbsts._data.hch = true;
+    hc.operational_regs.usbsts._data.hse = true;
+    hc.operational_regs.usbsts._data.pcd = false;
+    const status = hc.operational_regs.usbsts.read();
+    try expectEqual(status.hch, true);
+    try expectEqual(status.hse, true);
+    try expectEqual(status.pcd, false);
+
+    // Test HCSPARAMS1 Register
+    hc.capability_regs.hcs_params1._data.maxslots = 0x10;
+    try expectEqual(0x10, hc.capability_regs.hcs_params1.read().maxslots);
+}

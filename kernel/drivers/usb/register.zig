@@ -18,7 +18,7 @@ pub const CapabilityRegisters = packed struct {
     /// HC Structural Parameters 3.
     hcs_params3: u32,
     /// HC Capability Parameters 1.
-    hcc_params1: u32,
+    hcc_params1: Register(CapabilityParameters1, .DWORD),
     /// Doorbell Array Offset.
     dboff: u32,
     /// Runtime Register Space Offset.
@@ -52,7 +52,7 @@ pub const OperationalRegisters = packed struct {
 
 pub const PortRegisterSet = packed struct(u128) {
     /// Port Status and Control.
-    portsc: PortStatusControlRegister,
+    portsc: Register(PortStatusControlRegister, .DWORD),
     /// Port Power Management Status and Control.
     portpmsc: u32,
     /// Port Link Info.
@@ -223,12 +223,20 @@ const StructuralParameters1 = packed struct(u32) {
     maxports: u8,
 };
 
+/// HCCPARAMS1
+const CapabilityParameters1 = packed struct(u32) {
+    /// Unimplemented
+    _unimplemented: u16,
+    /// xHCI Extended Capabilities Pointer.
+    xecp: u16,
+};
+
 /// Interrupt Register Set in the xHC's Runtime Registers.
 pub const InterrupterRegisterSet = packed struct(u256) {
     /// Interrupter Management Register.
-    iman: InterrupterManagementRegister,
+    iman: Register(InterrupterManagementRegister, .DWORD),
     /// Interrupter Moderation Register.
-    imod: InterrupterModerationRegister,
+    imod: Register(InterrupterModerationRegister, .DWORD),
     /// Event Ring Register.
     err: EventRingRegister,
 };
