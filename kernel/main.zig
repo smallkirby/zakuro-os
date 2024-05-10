@@ -115,7 +115,11 @@ export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) n
     for (1..max_ports) |i| {
         const port = xhc.getPortAt(i);
         if (port.isConnected()) {
-            log.debug("USB Port {d} is connected.", .{i});
+            port.reset() catch |err| {
+                log.err("Failed to reset port {d}: {?}", .{ i, err });
+                continue;
+            };
+            log.info("Reset completed for port {d}.", .{i});
         }
     }
 

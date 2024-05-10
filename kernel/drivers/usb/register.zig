@@ -84,6 +84,8 @@ const PortStatusControlRegister = packed struct(u32) {
     /// Port Link State Write Strobe.
     lws: bool,
     /// Connect Status Change.
+    /// This bit is RW1CS (Sticky-Write-1-to-clear status).
+    /// Writing 1 to this bit clears the status, and 0 has no effect.
     csc: bool,
     /// Port Enabled/Disabled Change.
     pec: bool,
