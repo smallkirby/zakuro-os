@@ -53,7 +53,13 @@ fn panic(
             log.err("Failed to write stack trace: {s}\n", .{err});
         };
     } else {
-        log.err("RA: 0x{X}", .{@returnAddress()});
+        var it = std.debug.StackIterator.init(@returnAddress(), null);
+        var ix: usize = 0;
+        log.err("=== Stack Trace ==============", .{});
+        while (it.next()) |frame| {
+            log.err("#{d:0>2}: 0x{X}: (No symbol available)", .{ ix, frame });
+            ix += 1;
+        }
     }
 
     bpHalt();
