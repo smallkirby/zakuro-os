@@ -46,12 +46,14 @@ fn panic(
     _ = ret_addr;
 
     serial = ser.get();
-    log.err("{s}\n", .{msg});
+    log.err("{s}", .{msg});
 
     if (error_return_trace) |ert| {
         printStackTrace(ert) catch |err| {
             log.err("Failed to write stack trace: {s}\n", .{err});
         };
+    } else {
+        log.err("RA: 0x{X}", .{@returnAddress()});
     }
 
     bpHalt();

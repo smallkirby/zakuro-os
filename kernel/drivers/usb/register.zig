@@ -208,7 +208,7 @@ pub const DoorbellRegister = packed struct(u32) {
     /// Doorbell Target.
     db_target: u8,
     /// Reserved.
-    _reserved: u8,
+    _reserved: u8 = 0,
     /// Doorbell Stream ID.
     db_stream_id: u16,
 };
@@ -234,17 +234,15 @@ const CapabilityParameters1 = packed struct(u32) {
 };
 
 /// Interrupt Register Set in the xHC's Runtime Registers.
+/// An Interrupter manages events and their notification to the host.
+/// Multiple interrupters can be used to distribute the load of event processing.
+/// But we use only one interrupter (primaly interrupter) in this implementation.
 pub const InterrupterRegisterSet = packed struct(u256) {
     /// Interrupter Management Register.
     iman: Register(InterrupterManagementRegister, .DWORD),
     /// Interrupter Moderation Register.
     imod: Register(InterrupterModerationRegister, .DWORD),
-    /// Event Ring Register.
-    err: EventRingRegister,
-};
 
-/// Event Ring Register.
-const EventRingRegister = packed struct(u192) {
     /// Event Ring Segment Table Size Register.
     erstsz: u32,
     /// Reserved.

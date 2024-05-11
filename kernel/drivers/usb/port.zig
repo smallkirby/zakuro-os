@@ -31,15 +31,20 @@ pub const Port = struct {
         return self.prs.portsc.read().ccs;
     }
 
+    /// Returns true if the port is enabled.
+    pub fn isEnabled(self: Self) bool {
+        return self.prs.portsc.read().ped;
+    }
+
+    /// Returns true if the port reset status has changed.
+    pub fn isResetChanged(self: Self) bool {
+        return self.prs.portsc.read().prc;
+    }
+
     /// Reset the port.
     /// This operation is necessary for USB2 to make the port 'Enable'.
     /// USB3 essentially does not need it, but has no side effects.
-    pub fn reset(self: Self) PortError!void {
-        const sc = self.prs.portsc.read();
-        if (!(sc.ccs and sc.csc)) {
-            return PortError.InvalidState;
-        }
-
+    pub fn reset(self: Self) void {
         self.prs.portsc.modify(.{
             .pr = true,
             // CSC bit is WR1CS, so we need to write a 1 to clear it.
@@ -50,4 +55,18 @@ pub const Port = struct {
             arch.relax();
         }
     }
+};
+
+/// State of the port and associated slot.
+pub const PortState = enum(u8) {
+    /// Not connected.
+    Disconnected,
+    /// Waiting for the slot is addressed
+    WaitingAddressed,
+    /// Undergoing reset.
+    Resetting,
+    /// Undergoing enabling slot.
+    EnablingSlot,
+    /// Undergoing assigning address.
+    Addressing,
 };

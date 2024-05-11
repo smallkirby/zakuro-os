@@ -1,38 +1,51 @@
 //! This module provides a context structures for xHC.
 
+const std = @import("std");
+
 /// Device Context that is transferred to the xHC to report the state of a device.
 /// TODO: Should be a packed or extern struct.
-pub const DeviceContext = struct {
-    slot_context: SlotContext,
+pub const InputContext = struct {
+    /// Input Control Context.
+    icc: InputControlContext,
+    /// Slot Context. Entry 0.
+    sc: SlotContext,
     endpoint_context: [31]EndpointContext,
 
+    const Self = @This();
+
     comptime {
-        if (@bitSizeOf(DeviceContext) != (32 * 8) * 32) {
+        if (@bitSizeOf(Self) != (32 * 8) * 33) {
             @compileError("Invalid size for DeviceContext");
         }
     }
+
+    /// Clear Input Control Context.
+    pub fn clearIcc(self: *Self) void {
+        const ptr = std.mem.asBytes(&self.icc);
+        @memset(ptr[0..@sizeOf(@TypeOf(self.icc))], 0);
+    }
 };
 
-/// Slot Context that defines information that applies to a device as a whole.
-pub const SlotContext = packed struct(u256) {
-    /// Route String, used by hubs to route packets to the downstream port.
+/// Slot Context that defines entire configuration of the slot.
+const SlotContext = packed struct(u256) {
+    /// Route String that is used by hubs to route packets to the correct downstream port.
     route_string: u20,
-    /// Speed. Deprecated.
-    speed: u4,
+    /// Deprecated.
+    _speed: u4,
     /// Reserved.
     _reserved1: u1,
     /// Multi-TT.
     mtt: bool,
-    /// Hub. Software set to 1 if this device is a USB hub.
+    /// Set to 1 if the device is a hub.
     hub: bool,
-    /// Context Entries. The index of the last valid Endpoint Context within this Device Context.
+    /// Context Entries. Identifies the index of the last valid Endpoint Context within this Device Context.
     context_entries: u5,
 
     /// Max Exit Latency.
     max_exit_latency: u16,
     /// Root Hub Port Number.
-    root_hub_port_number: u8,
-    /// Number of Ports.
+    root_hub_port_num: u8,
+    /// Number of Ports. Only used if the device is a hub.
     num_ports: u8,
 
     /// Parent Hub Slot ID.
@@ -54,13 +67,7 @@ pub const SlotContext = packed struct(u256) {
     slot_state: u5,
 
     /// xHCI Reserved.
-    _xhci_reserved: u128 = 0,
-
-    comptime {
-        if (@bitSizeOf(SlotContext) != 32 * 8) {
-            @compileError("Invalid size for SlotContext");
-        }
-    }
+    _reserved4: u128,
 };
 
 /// Endpoint Context that defines information that applies to a single endpoint.
@@ -109,10 +116,37 @@ pub const EndpointContext = packed struct(u256) {
 
     /// Reserved.
     _reserved5: u96 = undefined,
+};
+
+/// Input Control Context for Input Context.
+const InputControlContext = packed struct(u256) {
+    /// Drop Context Flags.
+    drop_context_flag: u32,
+    /// Add Context Flags.
+    /// Determines entries in the Input Control Context should be evaluated.
+    add_context_flag: u32,
+    /// Reserved.
+    _reserved1: u160 = 0,
+    /// TODO
+    configuration_value: u8,
+    /// TODO
+    interface_number: u8,
+    /// TODO
+    alternate_setting: u8,
+    /// Reserved.
+    _reserved2: u8 = 0,
+};
+
+/// TODO
+pub const DeviceContext = struct {
+    /// Slot Context.
+    slot_context: SlotContext,
+    /// Endpoint Contexts.
+    endpoint_contexts: [31]EndpointContext,
 
     comptime {
-        if (@bitSizeOf(EndpointContext) != 32 * 8) {
-            @compileError("Invalid size for EndpointContext");
+        if (@bitSizeOf(DeviceContext) != (32 * 8) * 32) {
+            @compileError("Invalid size for DeviceContext");
         }
     }
 };
