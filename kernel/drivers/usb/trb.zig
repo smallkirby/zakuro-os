@@ -1,5 +1,7 @@
 //! This file defines xHCI TRB (Transfer Request Block) structures.
 
+const std = @import("std");
+
 /// Template for Trb.
 pub const Trb = packed struct(u128) {
     /// Parameter. Ring-specific.
@@ -16,6 +18,10 @@ pub const Trb = packed struct(u128) {
     trb_type: TrbType,
     /// Control. Ring-specific.
     control: u16,
+
+    pub fn clear(self: *Trb) void {
+        @memset(std.mem.asBytes(self)[0..@sizeOf(Trb)], 0);
+    }
 };
 
 pub const PortStatusChangeEventTrb = packed struct(u128) {

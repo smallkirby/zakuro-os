@@ -298,6 +298,7 @@ pub const Controller = struct {
 
         self.port_states[port_id] = .Addressing;
 
+        // Notify the xHC to address the device.
         var adc_trb = trbs.AddressDeviceCommandTrb{
             .slot_id = @truncate(slot_id),
             .input_context_pointer = @intFromPtr(&device.input_context),

@@ -6,6 +6,7 @@ const contexts = @import("context.zig");
 const DeviceContext = contexts.DeviceContext;
 const Ring = @import("ring.zig").Ring;
 const Trb = @import("trb.zig").Trb;
+const log = std.log.scoped(.device);
 
 pub const DeviceError = error{
     /// The requested slot is already used by other device and port.
@@ -53,7 +54,9 @@ pub const Controller = struct {
             return DeviceError.SlotAlreadyUsed;
         }
 
-        self.devices[slot_id] = self.allocator.create(Device) catch return DeviceError.AllocationFailed;
+        const device = self.allocator.create(Device) catch return DeviceError.AllocationFailed;
+        device.transfer_rings = self.allocator.alloc(?*Ring, 31) catch return DeviceError.AllocationFailed;
+        self.devices[slot_id] = device;
     }
 };
 
@@ -76,10 +79,9 @@ pub const Device = struct {
         transfer_ring.trbs = allocator.alignedAlloc(Trb, 64, size) catch {
             @panic("Aborting...");
         }; // TODO: return error
-        @memset(
-            std.mem.asBytes(transfer_ring.trbs.ptr)[0 .. @sizeOf(Trb) * size],
-            0,
-        );
+        for (transfer_ring.trbs) |*trb| {
+            trb.clear();
+        }
 
         self.transfer_rings[dci - 1] = transfer_ring;
         return transfer_ring;
