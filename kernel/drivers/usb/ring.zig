@@ -4,6 +4,7 @@ const Trb = @import("trb.zig").Trb;
 const LinkTrb = @import("trb.zig").LinkTrb;
 const regs = @import("register.zig");
 const std = @import("std");
+const log = std.log.scoped(.ring);
 
 /// Ring that can be used both for Command Ring and Transfer Ring.
 /// Command Ring is used by software to pass device and HC related command the xHC.
@@ -81,7 +82,7 @@ pub const EventRing = struct {
         // Intcement ERDP
         var p: *volatile Trb = @ptrFromInt((self.interrupter.erdp & ~@as(u64, 0b1111)) + @sizeOf(Trb));
         const begin: *volatile Trb = @ptrFromInt(self.erst[0].ring_segment_base_addr);
-        const end: *volatile Trb = @ptrFromInt(self.erst[0].ring_segment_base_addr + self.erst[0].size);
+        const end: *volatile Trb = @ptrFromInt(self.erst[0].ring_segment_base_addr + self.erst[0].size * @sizeOf(Trb));
         if (p == end) {
             p = begin;
             self.pcs +|= 1;

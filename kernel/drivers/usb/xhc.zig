@@ -320,7 +320,7 @@ pub const Controller = struct {
             .EnableSlotCommand => {
                 if (self.port_under_reset == null or self.port_states[self.port_under_reset.?] != .EnablingSlot) {
                     log.err(
-                        "Invalid port state while the Enable Slot Command is completed: index={d}, current={?}",
+                        "Invalid port state while Enable Slot Command is completed: index={d}, current={?}",
                         .{ slot_id, self.port_states[slot_id] },
                     );
                     return XhcError.InvalidState;
