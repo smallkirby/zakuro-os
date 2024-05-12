@@ -14,6 +14,7 @@ const Trb = trbs.Trb;
 const DeviceContext = context.DeviceContext;
 const Regs = @import("register.zig");
 const Register = zakuro.mmio.Register;
+const usb = zakuro.drivers.usb;
 
 pub const XhcError = error{
     /// Memory allocation failed.
@@ -274,6 +275,7 @@ pub const Controller = struct {
         self.event_ring.pop();
     }
 
+    /// Assign an address to the device.
     fn addressDevice(self: *Self, port_id: usize, slot_id: usize) XhcError!void {
         log.debug("Addressing the device: port_id={d}, slot_id={d}", .{ port_id, slot_id });
 
@@ -337,6 +339,15 @@ pub const Controller = struct {
         log.debug("Notified the xHC to address the device.", .{});
     }
 
+    /// TODO: doc
+    fn initializeDevice(self: *Self, port_id: usize, slot_id: usize) XhcError!void {
+        const device = self.dev_controller.devices[slot_id] orelse {
+            return XhcError.InvalidSlot;
+        };
+        self.port_states[port_id] = .InitializingDevice;
+        device.startup(usb.endpoint.default_control_pipe_id, .Device, 0, &device.buffer);
+    }
+
     /// Handle an Command Completion Event.
     fn onCommandCompleteEvent(
         self: *Self,
@@ -372,6 +383,8 @@ pub const Controller = struct {
 
                 self.port_under_reset = null;
                 try self.schedulePort();
+
+                try self.initializeDevice(port_id, slot_id);
             },
             else => {
                 log.err("Unsupported TRB command is completed.", .{});

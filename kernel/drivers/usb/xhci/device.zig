@@ -7,6 +7,10 @@ const DeviceContext = contexts.DeviceContext;
 const Ring = @import("ring.zig").Ring;
 const Trb = @import("trb.zig").Trb;
 const log = std.log.scoped(.device);
+const zakuro = @import("zakuro");
+const setupdata = zakuro.drivers.usb.setupdata;
+const endpoint = zakuro.drivers.usb.endpoint;
+const descriptor = zakuro.drivers.usb.descriptor;
 
 pub const DeviceError = error{
     /// The requested slot is already used by other device and port.
@@ -71,10 +75,12 @@ pub const Device = struct {
     transfer_rings: []?*Ring,
     /// Slot ID
     slot_id: usize,
+    /// General purpose buffer for this device.
+    buffer: [256]u8 = [_]u8{0} ** 256,
 
     const Self = @This();
 
-    /// TODO: docs
+    /// Allocate a Transfer Ring for the specified Endpoint.
     pub fn allocTransferRing(self: *Self, dci: usize, size: usize, allocator: Allocator) *Ring {
         const transfer_rings = allocator.alignedAlloc(Ring, 64, 1) catch {
             @panic("Aborting...");
@@ -92,7 +98,42 @@ pub const Device = struct {
         return tr;
     }
 
-    // unimplemented
+    /// Start initialization of the device and get the descriptor.
+    pub fn startup(
+        self: *Self,
+        epid: endpoint.EndpointId,
+        desc_type: descriptor.DescriptorType,
+        desc_index: u8,
+        buf: []u8,
+    ) void {
+        const sud = setupdata.SetupData{
+            .bm_request_type = .{
+                .dtd = .In,
+                .type = .Standard,
+                .recipient = .Device,
+            },
+            .b_request = .GetDescriptor,
+            .w_value = (@intFromEnum(desc_type) << 8) + desc_index,
+            .windex = 0,
+            .w_length = @intCast(buf.len),
+        };
+
+        self.getDescriptor(epid, sud, buf);
+    }
+
+    /// Get the descriptor of the device.
+    pub fn getDescriptor(
+        self: *Self,
+        ep_id: endpoint.EndpointId,
+        sud: setupdata.SetupData,
+        buf: []u8,
+    ) void {
+        // TODO
+        _ = self; // autofix
+        _ = ep_id; // autofix
+        _ = sud; // autofix
+        _ = buf; // autofix
+    }
 };
 
 /// Direction of the Endpoint Context.

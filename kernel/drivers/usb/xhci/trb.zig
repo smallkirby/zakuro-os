@@ -122,12 +122,111 @@ pub const AddressDeviceCommandTrb = packed struct(u128) {
     slot_id: u8 = 0,
 };
 
+pub const SetupStageTrb = packed struct(u128) {
+    // bmRequestType
+    bm_request_type: u8,
+    /// bRequest
+    b_request: u8,
+    /// wValue
+    w_value: u16,
+
+    /// wIndex
+    w_index: u16,
+    /// wLength
+    w_length: u16,
+
+    /// TRB Transfer Length. Always 8.
+    trb_transfer_length: u16 = 8,
+    /// Reserved.
+    _reserved1: u5 = 0,
+    /// Interrupter Target.
+    interrupter_target: u10,
+
+    /// Cycle bit.
+    cycle_bit: u1 = 1,
+    /// Reserved.
+    _reserved2: u4 = 0,
+    /// Interrupt On Completion.
+    ioc: bool,
+    /// Immediate Data.
+    idt: bool,
+    /// Reserved.
+    _reserved3: u3 = 0,
+    /// TRB Type.
+    trb_type: TrbType = .SetupStage,
+    /// Transfer Type.
+    trt: u2,
+    /// Reserved.
+    _reserved4: u16 = 0,
+};
+
+pub const DataStageTrb = packed struct(u128) {
+    /// TRB Buffer Pointer.
+    trb_buffer_pointer: u64,
+
+    /// TRB Transfer Length.
+    trb_transfer_length: u17,
+    /// TD Size.
+    td_size: u5,
+    /// Interrupter Target.
+    interrupter_target: u10,
+
+    /// Cycle bit.
+    cycle_bit: u1 = 1,
+    /// Evaluate Next TRB.
+    ent: bool,
+    /// Interrupter on Short Packet.
+    isp: bool,
+    /// No Snoop.
+    ns: bool,
+    /// Chain Bit.
+    ch: bool,
+    /// Interrupt On Completion.
+    ioc: bool,
+    /// Immediate Data.
+    idt: bool,
+    /// Reserved.
+    _reserved3: u3 = 0,
+    /// TRB Type.
+    trb_type: TrbType = .DataStage,
+    /// Direction.
+    dir: u1,
+    /// Reserved.
+    _reserved4: u15 = 0,
+};
+
+pub const StatusStageTrb = packed struct(u128) {
+    /// Reserved.
+    _reserved1: u86 = 0,
+    /// Interrupter Target.
+    interrupter_target: u10,
+
+    /// Cycle bit.
+    cycle_bit: u1 = 1,
+    /// Evaluate Next TRB.
+    ent: bool,
+    /// Reserved.
+    _reserved2: u2,
+    /// Chain Bit.
+    ch: bool,
+    /// Interrupt On Completion.
+    ioc: bool,
+    _reserved3: u4 = 0,
+    /// TRB Type.
+    trb_type: TrbType = .StatusStage,
+    /// Direction.
+    dir: u1,
+    /// Reserved.
+    _reserved4: u15 = 0,
+};
+
 /// Type ID of TRB.
 pub const TrbType = enum(u6) {
     Reserved = 0,
     Normal = 1,
     SetupStage = 2,
     DataStage = 3,
+    StatusStage = 4,
     // ...
     Link = 6,
     // ...

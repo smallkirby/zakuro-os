@@ -69,4 +69,6 @@ pub const PortState = enum(u8) {
     EnablingSlot,
     /// Undergoing assigning address.
     Addressing,
+    /// Undergoing initializing device.
+    InitializingDevice,
 };
