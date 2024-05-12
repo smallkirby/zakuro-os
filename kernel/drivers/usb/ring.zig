@@ -31,6 +31,12 @@ pub const Ring = struct {
         }
     }
 
+    pub fn init(self: *Ring, trbs: []Trb) void {
+        self.pcs = 1;
+        self.index = 0;
+        self.trbs = trbs;
+    }
+
     /// Enqueue a TRB to the Ring.
     /// CRB of the TRB is properly set.
     /// TRB is copied, so the argument can be located in the stack.

@@ -9,6 +9,7 @@ const ring = @import("ring.zig");
 const port = @import("port.zig");
 const trbs = @import("trb.zig");
 const DevController = @import("device.zig").Controller;
+const mod_device = @import("device.zig");
 const Trb = trbs.Trb;
 const DeviceContext = context.DeviceContext;
 const Regs = @import("register.zig");
@@ -231,8 +232,17 @@ pub const Controller = struct {
         return port.Port.new(port_index, prs);
     }
 
+    /// Check if HCE(Host Controller Error) is asserted.
+    fn checkError(self: *Self) void {
+        if (self.operational_regs.usbsts.read().hce) {
+            log.err("HCE is set.", .{});
+        }
+    }
+
     /// Process an event queued in the Event Ring.
     pub fn processEvent(self: *Self) XhcError!void {
+        self.checkError();
+
         if (!self.event_ring.hasEvent()) {
             return;
         }
@@ -248,6 +258,8 @@ pub const Controller = struct {
     }
 
     fn addressDevice(self: *Self, port_id: usize, slot_id: usize) XhcError!void {
+        log.debug("Addressing the device: port_id={d}, slot_id={d}", .{ port_id, slot_id });
+
         // Allocate a device in the slot.
         self.dev_controller.allocateDevice(slot_id) catch |err| {
             log.err("Failed to allocate a device in the slot: {?}", .{err});
@@ -264,9 +276,9 @@ pub const Controller = struct {
         device.input_context.clearIcc();
 
         // Enable Slot Context and Endpoint 0 Context.
-        const ep0_dci = 1;
+        const ep0_dci = mod_device.calcDci(0, .InOut);
         device.input_context.icc.add_context_flag |= 0b1; // Enable Slot Context.
-        device.input_context.icc.add_context_flag |= 0b1 << ep0_dci; // Enable Endpoint 0 Context.
+        device.input_context.icc.add_context_flag |= @as(u32, 0b1) << ep0_dci; // Enable Endpoint 0 Context.
 
         // Initialize Slot Context.
         const prt = self.getPortAt(port_id);
@@ -284,14 +296,14 @@ pub const Controller = struct {
         );
         const epctx = &device.input_context.endpoint_context[0];
         epctx.ep_type = 4; // TODO: docs
-        epctx.max_packet_size = 64; // TODO: docs
+        epctx.max_packet_size = mod_device.calcMaxPacketSize(sc._speed);
         epctx.max_burst_size = 0;
         epctx.interval = 0;
         epctx.max_pstreams = 0;
         epctx.mult = 0;
         epctx.cerr = 3; // TODO: docs
         epctx.dcs = 1; // TODO: docs
-        epctx.tr_dequeue_pointer = @truncate(@intFromPtr(transfer_ring) >> 4);
+        epctx.tr_dequeue_pointer = @truncate(@intFromPtr(transfer_ring.trbs.ptr) >> 4);
 
         // Record the device context.
         self.dev_controller.dcbaa[slot_id] = &device.device_context;
@@ -299,6 +311,7 @@ pub const Controller = struct {
         self.port_states[port_id] = .Addressing;
 
         // Notify the xHC to address the device.
+        log.debug("Input Context @ {X:0>16}", .{@intFromPtr(&device.input_context)});
         var adc_trb = trbs.AddressDeviceCommandTrb{
             .slot_id = @truncate(slot_id),
             .input_context_pointer = @intFromPtr(&device.input_context),
@@ -315,12 +328,13 @@ pub const Controller = struct {
         const cmd_trb: *Trb = @ptrFromInt(trb.command_trb_pointer);
         const issuer_type = cmd_trb.trb_type;
         const slot_id = trb.slot_id;
+        log.debug("Command Completion Event: slot_id={d}, issuer_type={?}", .{ slot_id, issuer_type });
 
         switch (issuer_type) {
             .EnableSlotCommand => {
                 if (self.port_under_reset == null or self.port_states[self.port_under_reset.?] != .EnablingSlot) {
                     log.err(
-                        "Invalid port state while Enable Slot Command is completed: index={d}, current={?}",
+                        "Invalid port state when Enable Slot Command is completed: index={d}, current={?}",
                         .{ slot_id, self.port_states[slot_id] },
                     );
                     return XhcError.InvalidState;
@@ -341,6 +355,7 @@ pub const Controller = struct {
     ) XhcError!void {
         const port_id = trb.port_id;
         const target_port = self.getPortAt(port_id);
+        log.debug("Port Status Change Event: port_id={d}, status={?}", .{ port_id, self.port_states[port_id] });
 
         try switch (self.port_states[port_id]) {
             .Disconnected => self.resetPort(target_port),
@@ -362,6 +377,7 @@ pub const Controller = struct {
         if (!enabled or !reset_changed) {
             return;
         }
+        log.debug("Enabling the port: {d}", .{prt.port_index});
 
         // Clear status change bit
         prt.prs.portsc.modify(.{
