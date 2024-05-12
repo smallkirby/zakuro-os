@@ -7,11 +7,14 @@ const contexts = @import("context.zig");
 const DeviceContext = contexts.DeviceContext;
 const Ring = @import("ring.zig").Ring;
 const Trb = @import("trb.zig").Trb;
+const regs = @import("register.zig");
 const log = std.log.scoped(.device);
 const zakuro = @import("zakuro");
 const setupdata = zakuro.drivers.usb.setupdata;
 const endpoint = zakuro.drivers.usb.endpoint;
 const descriptor = zakuro.drivers.usb.descriptor;
+const UsbDevice = zakuro.drivers.usb.device.UsbDevice;
+const Register = zakuro.mmio.Register;
 
 pub const DeviceError = error{
     /// The requested slot is already used by other device and port.
@@ -27,7 +30,7 @@ pub const Controller = struct {
     /// The maximum number of Slots that the xHC can have.
     max_slot: usize,
     /// Pointers to the registered devices.
-    devices: []?*XhciDevice,
+    devices: []?*UsbDevice,
     /// DCBAA: Device Context Base Address Array.
     dcbaa: []?*DeviceContext,
 
@@ -36,9 +39,12 @@ pub const Controller = struct {
 
     const Self = @This();
 
-    pub fn new(max_slot: usize, allocator: Allocator) DeviceError!Self {
+    pub fn new(
+        max_slot: usize,
+        allocator: Allocator,
+    ) DeviceError!Self {
         const dcbaa = allocator.alignedAlloc(?*DeviceContext, 64, max_slot + 1) catch return DeviceError.AllocationFailed;
-        const devices = allocator.alloc(?*XhciDevice, max_slot + 1) catch return DeviceError.AllocationFailed;
+        const devices = allocator.alloc(?*UsbDevice, max_slot + 1) catch return DeviceError.AllocationFailed;
         @memset(dcbaa[0..dcbaa.len], null);
         @memset(devices[0..devices.len], null);
 
@@ -51,7 +57,11 @@ pub const Controller = struct {
     }
 
     /// Allocate a new device in the specified slot.
-    pub fn allocateDevice(self: *Self, slot_id: usize) !void {
+    pub fn allocateDevice(
+        self: *Self,
+        slot_id: usize,
+        db: *volatile Register(regs.DoorbellRegister, .DWORD),
+    ) !void {
         if (self.max_slot < slot_id) {
             return DeviceError.InvalidSlot;
         }
@@ -59,9 +69,10 @@ pub const Controller = struct {
             return DeviceError.SlotAlreadyUsed;
         }
 
-        const device = self.allocator.create(XhciDevice) catch return DeviceError.AllocationFailed;
-        device.transfer_rings = self.allocator.alloc(?*Ring, 31) catch return DeviceError.AllocationFailed;
-        device.slot_id = slot_id;
+        const device = self.allocator.create(UsbDevice) catch return DeviceError.AllocationFailed;
+        device.dev.transfer_rings = self.allocator.alloc(?*Ring, 31) catch return DeviceError.AllocationFailed;
+        device.dev.slot_id = slot_id;
+        device.db = db;
         self.devices[slot_id] = device;
     }
 };
@@ -76,8 +87,6 @@ pub const XhciDevice = struct {
     transfer_rings: []?*Ring,
     /// Slot ID
     slot_id: usize,
-    /// General purpose buffer for this device.
-    buffer: [256]u8 = [_]u8{0} ** 256,
 
     const Self = @This();
 
@@ -97,43 +106,6 @@ pub const XhciDevice = struct {
 
         self.transfer_rings[dci - 1] = tr;
         return tr;
-    }
-
-    /// Start initialization of the device and get the descriptor.
-    pub fn startup(
-        self: *Self,
-        epid: endpoint.EndpointId,
-        desc_type: descriptor.DescriptorType,
-        desc_index: u8,
-        buf: []u8,
-    ) void {
-        const sud = setupdata.SetupData{
-            .bm_request_type = .{
-                .dtd = .In,
-                .type = .Standard,
-                .recipient = .Device,
-            },
-            .b_request = .GetDescriptor,
-            .w_value = (@intFromEnum(desc_type) << 8) + desc_index,
-            .windex = 0,
-            .w_length = @intCast(buf.len),
-        };
-
-        self.getDescriptor(epid, sud, buf);
-    }
-
-    /// Get the descriptor of the device.
-    pub fn getDescriptor(
-        self: *Self,
-        ep_id: endpoint.EndpointId,
-        sud: setupdata.SetupData,
-        buf: []u8,
-    ) void {
-        // TODO
-        _ = self; // autofix
-        _ = ep_id; // autofix
-        _ = sud; // autofix
-        _ = buf; // autofix
     }
 };
 

@@ -258,7 +258,7 @@ pub const Controller = struct {
     }
 
     /// Process an event queued in the Event Ring.
-    pub fn processEvent(self: *Self) XhcError!void {
+    pub fn processEvent(self: *Self) !void {
         self.checkError();
 
         if (!self.event_ring.hasEvent()) {
@@ -281,7 +281,7 @@ pub const Controller = struct {
         log.debug("Addressing the device: port_id={d}, slot_id={d}", .{ port_id, slot_id });
 
         // Allocate a device in the slot.
-        self.dev_controller.allocateDevice(slot_id) catch |err| {
+        self.dev_controller.allocateDevice(slot_id, &self.doorbell_regs[slot_id]) catch |err| {
             log.err("Failed to allocate a device in the slot: {?}", .{err});
             switch (err) {
                 error.AllocationFailed => return XhcError.NoMemory,
@@ -292,7 +292,7 @@ pub const Controller = struct {
             }
         };
 
-        const device = self.dev_controller.devices[slot_id].?;
+        const device = &self.dev_controller.devices[slot_id].?.dev;
         device.input_context.clearIcc();
 
         // Enable Slot Context and Endpoint 0 Context.
@@ -335,25 +335,30 @@ pub const Controller = struct {
             .slot_id = @truncate(slot_id),
             .input_context_pointer = @intFromPtr(&device.input_context),
         };
-        self.cmd_ring.push(@ptrCast(&adc_trb));
+        _ = self.cmd_ring.push(@ptrCast(&adc_trb));
         self.notify_doorbell(0);
         log.debug("Notified the xHC to address the device.", .{});
     }
 
-    /// TODO: doc
-    fn initializeDevice(self: *Self, port_id: usize, slot_id: usize) XhcError!void {
+    /// Initialize the USB device at the specified port and slot.
+    fn initializeUsbDevice(self: *Self, port_id: usize, slot_id: usize) !void {
         const device = self.dev_controller.devices[slot_id] orelse {
             return XhcError.InvalidSlot;
         };
         self.port_states[port_id] = .InitializingDevice;
-        device.startup(usb.endpoint.default_control_pipe_id, .Device, 0, &device.buffer);
+        try device.startup(
+            usb.endpoint.default_control_pipe_id,
+            .Device,
+            0,
+            &device.buffer,
+        );
     }
 
     /// Handle an Command Completion Event.
     fn onCommandCompleteEvent(
         self: *Self,
         trb: *volatile trbs.CommandCompletionEventTrb,
-    ) XhcError!void {
+    ) !void {
         const cmd_trb: *Trb = @ptrFromInt(trb.command_trb_pointer);
         const issuer_type = cmd_trb.trb_type;
         const slot_id = trb.slot_id;
@@ -374,7 +379,7 @@ pub const Controller = struct {
                 const device = self.dev_controller.devices[slot_id] orelse {
                     return XhcError.InvalidSlot;
                 };
-                const port_id = device.device_context.slot_context.root_hub_port_num;
+                const port_id = device.dev.device_context.slot_context.root_hub_port_num;
                 if (port_id != self.port_under_reset) {
                     return XhcError.InvalidState;
                 }
@@ -385,7 +390,7 @@ pub const Controller = struct {
                 self.port_under_reset = null;
                 try self.schedulePort();
 
-                try self.initializeDevice(port_id, slot_id);
+                try self.initializeUsbDevice(port_id, slot_id);
             },
             else => {
                 log.err("Unsupported TRB command is completed.", .{});
@@ -433,7 +438,7 @@ pub const Controller = struct {
 
         // Issue Enable Slot Command
         var esc_trb = trbs.EnableSlotCommandTrb{};
-        self.cmd_ring.push(@ptrCast(&esc_trb));
+        _ = self.cmd_ring.push(@ptrCast(&esc_trb));
         self.notify_doorbell(0);
     }
 

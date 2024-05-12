@@ -40,9 +40,11 @@ pub const Ring = struct {
     /// Enqueue a TRB to the Ring.
     /// CRB of the TRB is properly set.
     /// TRB is copied, so the argument can be located in the stack.
-    pub fn push(self: *Ring, new_trb: *Trb) void {
+    pub fn push(self: *Ring, new_trb: *Trb) *Trb {
         // Copy the TRB to the tail of the Ring.
         self.copyToTail(new_trb);
+
+        const trb = &self.trbs[self.index];
 
         // Increment cursor.
         self.index += 1;
@@ -55,6 +57,8 @@ pub const Ring = struct {
             self.pcs +|= 1;
             self.index = 0;
         }
+
+        return trb;
     }
 };
 

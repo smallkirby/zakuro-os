@@ -1,7 +1,7 @@
 //! This file defines the Endpoint of USB2/USB3 spec.
 
 /// Endpoint ID for the default control pipe.
-pub const default_control_pipe_id = EndpointId{ .number = 0, .direction = .Out };
+pub const default_control_pipe_id = EndpointId{ .number = 0, .direction = .In };
 
 /// USB Endpoint.
 pub const Endpoint = struct {

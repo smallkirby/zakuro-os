@@ -136,7 +136,7 @@ pub const SetupStageTrb = packed struct(u128) {
     w_length: u16,
 
     /// TRB Transfer Length. Always 8.
-    trb_transfer_length: u16 = 8,
+    trb_transfer_length: u17 = 8,
     /// Reserved.
     _reserved1: u5 = 0,
     /// Interrupter Target.
@@ -147,17 +147,23 @@ pub const SetupStageTrb = packed struct(u128) {
     /// Reserved.
     _reserved2: u4 = 0,
     /// Interrupt On Completion.
-    ioc: bool,
+    ioc: bool = false,
     /// Immediate Data.
-    idt: bool,
+    idt: bool = false,
     /// Reserved.
     _reserved3: u3 = 0,
     /// TRB Type.
     trb_type: TrbType = .SetupStage,
     /// Transfer Type.
-    trt: u2,
+    trt: TransferType,
     /// Reserved.
-    _reserved4: u16 = 0,
+    _reserved4: u14 = 0,
+
+    pub const TransferType = enum(u2) {
+        NoDataStage = 0,
+        OutDataStage = 2,
+        InDataStage = 3,
+    };
 };
 
 pub const DataStageTrb = packed struct(u128) {
@@ -174,23 +180,23 @@ pub const DataStageTrb = packed struct(u128) {
     /// Cycle bit.
     cycle_bit: u1 = 1,
     /// Evaluate Next TRB.
-    ent: bool,
+    ent: bool = false,
     /// Interrupter on Short Packet.
-    isp: bool,
+    isp: bool = false,
     /// No Snoop.
-    ns: bool,
+    ns: bool = false,
     /// Chain Bit.
-    ch: bool,
+    ch: bool = false,
     /// Interrupt On Completion.
-    ioc: bool,
+    ioc: bool = false,
     /// Immediate Data.
-    idt: bool,
+    idt: bool = false,
     /// Reserved.
     _reserved3: u3 = 0,
     /// TRB Type.
     trb_type: TrbType = .DataStage,
     /// Direction.
-    dir: u1,
+    dir: Direction,
     /// Reserved.
     _reserved4: u15 = 0,
 };
@@ -206,7 +212,7 @@ pub const StatusStageTrb = packed struct(u128) {
     /// Evaluate Next TRB.
     ent: bool,
     /// Reserved.
-    _reserved2: u2,
+    _reserved2: u2 = 0,
     /// Chain Bit.
     ch: bool,
     /// Interrupt On Completion.
@@ -215,7 +221,7 @@ pub const StatusStageTrb = packed struct(u128) {
     /// TRB Type.
     trb_type: TrbType = .StatusStage,
     /// Direction.
-    dir: u1,
+    dir: Direction,
     /// Reserved.
     _reserved4: u15 = 0,
 };
@@ -238,4 +244,9 @@ pub const TrbType = enum(u6) {
     CommandCompletion = 33,
     PortStatusChange = 34,
     // ...
+};
+
+const Direction = enum(u1) {
+    Out = 0,
+    In = 1,
 };
