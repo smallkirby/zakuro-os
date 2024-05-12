@@ -16,9 +16,12 @@ const Regs = @import("register.zig");
 const Register = zakuro.mmio.Register;
 
 pub const XhcError = error{
+    /// Memory allocation failed.
     NoMemory,
-    UnexpectedAlign,
+    /// Invalid state of FSM.
     InvalidState,
+    /// Invalid slot number is specified.
+    InvalidSlot,
 };
 
 /// Maximum number of device slots supported by this driver.
@@ -239,6 +242,20 @@ pub const Controller = struct {
         }
     }
 
+    /// Find a port that waits to be addressed and start addressing it.
+    fn schedulePort(self: *Self) XhcError!void {
+        if (self.port_under_reset != null) {
+            return;
+        }
+        for (0.., self.port_states) |i, state| {
+            if (state == .WaitingAddressed) {
+                const prt = self.getPortAt(i);
+                try self.resetPort(prt);
+                break;
+            }
+        }
+    }
+
     /// Process an event queued in the Event Ring.
     pub fn processEvent(self: *Self) XhcError!void {
         self.checkError();
@@ -340,6 +357,21 @@ pub const Controller = struct {
                     return XhcError.InvalidState;
                 }
                 try self.addressDevice(self.port_under_reset.?, slot_id);
+            },
+            .AddressDeviceCommand => {
+                const device = self.dev_controller.devices[slot_id] orelse {
+                    return XhcError.InvalidSlot;
+                };
+                const port_id = device.device_context.slot_context.root_hub_port_num;
+                if (port_id != self.port_under_reset) {
+                    return XhcError.InvalidState;
+                }
+                if (self.port_states[port_id] != .Addressing) {
+                    return XhcError.InvalidState;
+                }
+
+                self.port_under_reset = null;
+                try self.schedulePort();
             },
             else => {
                 log.err("Unsupported TRB command is completed.", .{});
