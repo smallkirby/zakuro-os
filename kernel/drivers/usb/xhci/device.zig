@@ -1,4 +1,5 @@
-//! TODO
+//! This file provides a xHCI Device.
+//! Note that this device is at lower level than the USB Device.
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
@@ -26,7 +27,7 @@ pub const Controller = struct {
     /// The maximum number of Slots that the xHC can have.
     max_slot: usize,
     /// Pointers to the registered devices.
-    devices: []?*Device,
+    devices: []?*XhciDevice,
     /// DCBAA: Device Context Base Address Array.
     dcbaa: []?*DeviceContext,
 
@@ -37,7 +38,7 @@ pub const Controller = struct {
 
     pub fn new(max_slot: usize, allocator: Allocator) DeviceError!Self {
         const dcbaa = allocator.alignedAlloc(?*DeviceContext, 64, max_slot + 1) catch return DeviceError.AllocationFailed;
-        const devices = allocator.alloc(?*Device, max_slot + 1) catch return DeviceError.AllocationFailed;
+        const devices = allocator.alloc(?*XhciDevice, max_slot + 1) catch return DeviceError.AllocationFailed;
         @memset(dcbaa[0..dcbaa.len], null);
         @memset(devices[0..devices.len], null);
 
@@ -58,15 +59,15 @@ pub const Controller = struct {
             return DeviceError.SlotAlreadyUsed;
         }
 
-        const device = self.allocator.create(Device) catch return DeviceError.AllocationFailed;
+        const device = self.allocator.create(XhciDevice) catch return DeviceError.AllocationFailed;
         device.transfer_rings = self.allocator.alloc(?*Ring, 31) catch return DeviceError.AllocationFailed;
         device.slot_id = slot_id;
         self.devices[slot_id] = device;
     }
 };
 
-/// USB device.
-pub const Device = struct {
+/// xHCI device.
+pub const XhciDevice = struct {
     /// Input Context.
     input_context: contexts.InputContext align(64),
     /// Device Context.

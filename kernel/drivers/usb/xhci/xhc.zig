@@ -270,6 +270,7 @@ pub const Controller = struct {
             .Reserved => log.warn("TRB with Reserved Type is enqueued in the Event Ring.", .{}),
             .PortStatusChange => self.onPortStatusChangeEvent(@ptrCast(trb)),
             .CommandCompletion => self.onCommandCompleteEvent(@ptrCast(trb)),
+            .Transfer => @panic("Unimplemented"),
             else => log.warn("Unsupported TRB Type is enqueued in the Event Ring.", .{}),
         };
         self.event_ring.pop();
