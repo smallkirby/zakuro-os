@@ -10,7 +10,7 @@ pub const Endpoint = struct {
 
     const Self = @This();
 
-    pub fn new(ep_num: u32, direction: EndpointDirection) Self {
+    pub fn new(ep_num: u8, direction: EndpointDirection) Self {
         const id = EndpointId{ .number = ep_num, .direction = direction };
         return Self{
             .addr = id.addr(),
