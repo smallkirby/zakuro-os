@@ -311,13 +311,13 @@ pub const Controller = struct {
         self.port_states[port_id] = .Addressing;
 
         // Notify the xHC to address the device.
-        log.debug("Input Context @ {X:0>16}", .{@intFromPtr(&device.input_context)});
         var adc_trb = trbs.AddressDeviceCommandTrb{
             .slot_id = @truncate(slot_id),
             .input_context_pointer = @intFromPtr(&device.input_context),
         };
         self.cmd_ring.push(@ptrCast(&adc_trb));
         self.notify_doorbell(0);
+        log.debug("Notified the xHC to address the device.", .{});
     }
 
     /// Handle an Command Completion Event.

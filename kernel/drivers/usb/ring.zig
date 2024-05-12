@@ -95,7 +95,7 @@ pub const EventRing = struct {
         }
 
         // Set ERDP
-        self.interrupter.erdp = (@intFromPtr(p) & ~@as(u64, 0b1111)) | self.interrupter.erdp;
+        self.interrupter.erdp = (@intFromPtr(p) & ~@as(u64, 0b1111)) | (self.interrupter.erdp & @as(u64, 0b1111));
     }
 };
 
