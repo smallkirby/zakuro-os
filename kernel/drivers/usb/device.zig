@@ -47,7 +47,7 @@ pub const UsbDevice = struct {
             },
             .b_request = .GetDescriptor,
             .w_value = (@intFromEnum(desc_type) << 8) + desc_index,
-            .windex = 0,
+            .w_index = 0,
             .w_length = @intCast(buf.len),
         };
 
@@ -67,11 +67,13 @@ pub const UsbDevice = struct {
         const dci = ep_id.addr();
         const tr = self.dev.transfer_rings[dci - 1] orelse return UsbDeviceError.TransferRingUnavailable;
 
+        log.debug("Transfer Ring: {*}", .{tr});
+
         var setup_trb = trbs.SetupStageTrb{
             .bm_request_type = @bitCast(sud.bm_request_type),
             .b_request = @intFromEnum(sud.b_request),
             .w_value = sud.w_value,
-            .w_index = sud.windex,
+            .w_index = sud.w_index,
             .w_length = sud.w_length,
             .trt = .InDataStage,
             .interrupter_target = 0, // TODO
@@ -99,6 +101,8 @@ pub const UsbDevice = struct {
             .db_stream_id = 0,
             .db_target = @intCast(dci),
         });
+
+        log.debug("Notified to get descriptor: EP={d}, DCI={d}", .{ ep_id.number, dci });
     }
 
     fn controlIn(ep_id: endpoint.EndpointId, sud: setupdata.SetupData, buf: []u8) void {

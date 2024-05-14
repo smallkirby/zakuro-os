@@ -5,7 +5,7 @@ pub const SetupData = packed struct(u64) {
     bm_request_type: RequestType,
     b_request: SetupDataRequest,
     w_value: u16,
-    windex: u16,
+    w_index: u16,
     w_length: u16,
 };
 
