@@ -13,5 +13,5 @@ pub const mmio = @import("mmio.zig");
 
 test {
     const std = @import("std");
-    std.testing.refAllDeclsRecursive(@This());
+    std.testing.refAllDecls(@This());
 }

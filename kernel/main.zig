@@ -101,7 +101,7 @@ export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) n
     log.info("xHC MMIO base: 0x{X}", .{xhc_mmio_base});
 
     // Initialize xHC controller.
-    var xhc = drivers.xhc.Controller.new(xhc_mmio_base);
+    var xhc = drivers.usb.xhc.Controller.new(xhc_mmio_base);
     xhc.init() catch |err| {
         log.err("Failed to initialize xHC controller: {?}", .{err});
         unreachable;
