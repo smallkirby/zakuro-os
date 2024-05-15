@@ -149,7 +149,7 @@ pub const SetupStageTrb = packed struct(u128) {
     /// Interrupt On Completion.
     ioc: bool = false,
     /// Immediate Data.
-    idt: bool = false,
+    idt: bool = true,
     /// Reserved.
     _reserved3: u3 = 0,
     /// TRB Type.
