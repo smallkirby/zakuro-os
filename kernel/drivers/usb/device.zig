@@ -6,6 +6,7 @@ const endpoint = @import("endpoint.zig");
 const descriptor = @import("descriptor.zig");
 const setupdata = @import("setupdata.zig");
 const descs = @import("descriptor.zig");
+const class = @import("class.zig");
 const XhciDevice = @import("xhci/device.zig").XhciDevice;
 const trbs = @import("xhci/trb.zig");
 const regs = @import("xhci/register.zig");
@@ -110,7 +111,7 @@ pub const UsbDevice = struct {
         );
     }
 
-    /// Get the configuration descriptor.
+    /// Get the configuration descriptor and associated interface descriptors.
     fn init_one(self: *Self, device_desc: *descs.DeviceDescriptor) !void {
         if (self.phase != .Phase1) {
             return UsbDeviceError.InvalidPhase;
@@ -126,6 +127,46 @@ pub const UsbDevice = struct {
             self.config_index,
             &self.buffer,
         );
+    }
+
+    /// TODO: doc
+    fn init_second(self: *Self, buf: []u8) !void {
+        const first_desc: *descs.ConfigurationDescriptor = @alignCast(@ptrCast(buf.ptr));
+        if (first_desc.descriptor_type != .Configuration) {
+            return UsbDeviceError.InvalidDescriptor;
+        }
+        if (self.phase != .Phase2) {
+            return UsbDeviceError.InvalidPhase;
+        }
+
+        self.phase = .Phase3;
+
+        var bytes_consumed: usize = 0;
+        while (bytes_consumed <= buf.len) {
+            var p = buf[bytes_consumed..].ptr;
+            const if_desc: *align(1) descs.InterfaceDescriptor = @alignCast(@ptrCast(p));
+            log.debug("p = {*}", .{p});
+            bytes_consumed += if_desc.length;
+            p += if_desc.length;
+
+            if (if_desc.descriptor_type != .Interface) {
+                continue;
+            }
+
+            const class_driver = class.newClassDriver(self, if_desc.*) catch continue; // TODO;
+            _ = class_driver; // autofix
+            for (0..if_desc.num_endpoints) |_| {
+                if (p[1] != @intFromEnum(descs.DescriptorType.Endpoint)) continue;
+                const ep_desc: *align(1) descs.EndpointDescriptor = @alignCast(@ptrCast(p));
+                bytes_consumed += ep_desc.length;
+                p += ep_desc.length;
+                log.debug("{?}", .{ep_desc});
+
+                // TODO: unimplemented: handle the endpoint descriptor
+            }
+        }
+
+        // TODO: unimplemented: increment the phase
     }
 
     /// Handle the transfer event.
@@ -150,6 +191,9 @@ pub const UsbDevice = struct {
 
         // Get the data buffer and its length.
         var data_stage_buf: ?[*]u8 = null;
+        // Transfer Event TRB's transfer_length field is the total length of the data buffer
+        // minus the length of the data transferred by the TRB.
+        // The residual length is the length of the data transferred by the issuer TRB.
         var transfer_length: usize = 0;
         switch (issuer_trb.trb_type) {
             .DataStage => {
@@ -187,6 +231,13 @@ pub const UsbDevice = struct {
                     const desc: *descs.DeviceDescriptor = @alignCast(@ptrCast(b.ptr));
                     if (desc.descriptor_type != .Device) return UsbDeviceError.InvalidDescriptor;
                     try self.init_one(desc);
+                } else {
+                    return UsbDeviceError.InvalidPhase;
+                }
+            },
+            .Phase2 => {
+                if (buf) |b| {
+                    try self.init_second(b);
                 } else {
                     return UsbDeviceError.InvalidPhase;
                 }
