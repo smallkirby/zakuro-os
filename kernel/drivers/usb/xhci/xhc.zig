@@ -372,8 +372,7 @@ pub const Controller = struct {
 
         try dev.onTransferEventReceived(trb);
 
-        // TODO: unimplemented
-        @panic("Unimplemented onTransfer");
+        // TODO: unimplemented: start config of the device after initialization.
     }
 
     /// Handle an Command Completion Event.

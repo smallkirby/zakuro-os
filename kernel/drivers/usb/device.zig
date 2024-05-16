@@ -40,6 +40,10 @@ pub const UsbDevice = struct {
     db: *volatile Register(regs.DoorbellRegister, .DWORD),
     /// Phase of the initialization.
     phase: InitializationPhase = .NotAddressed,
+    /// Index of the configuration descriptor currently being processed.
+    config_index: u8,
+    /// Number of configuration descriptors this device has.
+    num_config: u8,
 
     /// Map that associate SetupStageTrb with DataStageTrb.
     setup_trb_map: SetupTrbMap,
@@ -64,6 +68,8 @@ pub const UsbDevice = struct {
         self.setup_trb_map = SetupTrbMap.init(allocator);
         self.allocator = allocator;
         self.phase = .NotAddressed;
+        self.config_index = 0;
+        self.num_config = 0;
     }
 
     /// Get the specified type of descriptor.
@@ -110,7 +116,16 @@ pub const UsbDevice = struct {
             return UsbDeviceError.InvalidPhase;
         }
 
-        _ = device_desc; // autofix
+        self.phase = .Phase2;
+        self.num_config = device_desc.num_configurations;
+        self.config_index = 0;
+
+        try self.getDescriptor(
+            endpoint.default_control_pipe_id,
+            .Configuration,
+            self.config_index,
+            &self.buffer,
+        );
     }
 
     /// Handle the transfer event.

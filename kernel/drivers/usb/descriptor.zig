@@ -3,6 +3,7 @@
 /// List of Descriptor Types.
 pub const DescriptorType = enum(u8) {
     Device = 1,
+    Configuration = 2,
 };
 
 pub const DeviceDescriptor = packed struct(u144) {
