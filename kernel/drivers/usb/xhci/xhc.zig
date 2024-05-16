@@ -15,6 +15,7 @@ const DeviceContext = context.DeviceContext;
 const Regs = @import("register.zig");
 const Register = zakuro.mmio.Register;
 const usb = zakuro.drivers.usb;
+const DeviceDescriptor = usb.descriptor.DeviceDescriptor;
 
 pub const XhcError = error{
     /// Memory allocation failed.
@@ -23,6 +24,8 @@ pub const XhcError = error{
     InvalidState,
     /// Invalid slot number is specified.
     InvalidSlot,
+    /// xHC failed to process the Transfer.
+    TransferFailed,
 };
 
 /// Maximum number of device slots supported by this driver.
@@ -270,7 +273,7 @@ pub const Controller = struct {
             .Reserved => log.warn("TRB with Reserved Type is enqueued in the Event Ring.", .{}),
             .PortStatusChange => self.onPortStatusChangeEvent(@ptrCast(trb)),
             .CommandCompletion => self.onCommandCompleteEvent(@ptrCast(trb)),
-            .Transfer => @panic("Unimplemented"),
+            .Transfer => onTransfer(self, @ptrCast(trb)),
             else => log.warn("Unsupported TRB Type is enqueued in the Event Ring.", .{}),
         };
         self.event_ring.pop();
@@ -281,7 +284,11 @@ pub const Controller = struct {
         log.debug("Addressing the device: port_id={d}, slot_id={d}", .{ port_id, slot_id });
 
         // Allocate a device in the slot.
-        self.dev_controller.allocateDevice(slot_id, &self.doorbell_regs[slot_id]) catch |err| {
+        self.dev_controller.allocateDevice(
+            slot_id,
+            &self.doorbell_regs[slot_id],
+            self.allocator,
+        ) catch |err| {
             log.err("Failed to allocate a device in the slot: {?}", .{err});
             switch (err) {
                 error.AllocationFailed => return XhcError.NoMemory,
@@ -346,12 +353,27 @@ pub const Controller = struct {
             return XhcError.InvalidSlot;
         };
         self.port_states[port_id] = .InitializingDevice;
-        try device.startup(
-            usb.endpoint.default_control_pipe_id,
-            .Device,
-            0,
-            &device.buffer,
-        );
+        try device.start_device_init();
+    }
+
+    /// Handle an Transfer Event.
+    fn onTransfer(
+        self: *Self,
+        trb: *volatile trbs.TransferEventTrb,
+    ) !void {
+        const slot_id = trb.slot_id;
+        const dev = self.dev_controller.devices[slot_id] orelse return XhcError.InvalidSlot;
+
+        // Check if the completion code is valid.
+        switch (trb.completion_code) {
+            1, 13 => {},
+            else => return XhcError.TransferFailed,
+        }
+
+        try dev.onTransferEventReceived(trb);
+
+        // TODO: unimplemented
+        @panic("Unimplemented onTransfer");
     }
 
     /// Handle an Command Completion Event.

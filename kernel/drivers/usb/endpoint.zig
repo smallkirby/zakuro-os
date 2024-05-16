@@ -24,6 +24,13 @@ pub const EndpointId = struct {
     /// Direction of endpoint
     direction: EndpointDirection,
 
+    pub fn from(actual_addr: u32) EndpointId {
+        return EndpointId{
+            .number = @truncate(actual_addr >> 1),
+            .direction = @enumFromInt(actual_addr & 1),
+        };
+    }
+
     pub fn addr(self: EndpointId) u32 {
         return (self.number << 1) + @intFromEnum(self.direction);
     }

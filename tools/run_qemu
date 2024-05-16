@@ -26,6 +26,7 @@ qemu-system-x86_64 \
   -drive if=pflash,format=raw,file="$OVMF_VARS" \
   -drive if=ide,index=0,media=disk,format=raw,file="$DISK_IMG" \
   -device nec-usb-xhci,id=xhci \
-  -device usb-mouse -device usb-kbd \
+  -device usb-mouse \
+  -device usb-kbd \
   -serial mon:stdio \
   -s

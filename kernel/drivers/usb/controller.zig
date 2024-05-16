@@ -55,6 +55,7 @@ pub const Controller = struct {
         self: *Self,
         slot_id: usize,
         db: *volatile Register(regs.DoorbellRegister, .DWORD),
+        allocator: std.mem.Allocator,
     ) !void {
         if (self.max_slot < slot_id) {
             return ControllerError.InvalidSlot;
@@ -64,9 +65,8 @@ pub const Controller = struct {
         }
 
         const device = self.allocator.create(UsbDevice) catch return ControllerError.AllocationFailed;
-        device.dev.transfer_rings = self.allocator.alloc(?*Ring, 31) catch return ControllerError.AllocationFailed;
-        device.dev.slot_id = slot_id;
-        device.db = db;
+        const tr = self.allocator.alloc(?*Ring, 31) catch return ControllerError.AllocationFailed;
+        device.initialize(tr, slot_id, db, allocator);
         self.devices[slot_id] = device;
     }
 };
