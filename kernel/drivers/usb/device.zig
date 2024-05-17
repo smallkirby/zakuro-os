@@ -103,6 +103,27 @@ pub const UsbDevice = struct {
         try self.controlIn(ep_id, sud, buf);
     }
 
+    /// Issue Configure Endpoint Command and enable the endpoint.
+    fn setConfiguration(
+        self: *Self,
+        ep_id: endpoint.EndpointId,
+        config_value: u8,
+    ) !void {
+        const sud = setupdata.SetupData{
+            .bm_request_type = .{
+                .dtd = .Out,
+                .type = .Standard,
+                .recipient = .Device,
+            },
+            .b_request = .SetConfiguration,
+            .w_index = 0,
+            .w_length = 0,
+            .w_value = @intCast(config_value),
+        };
+
+        try self.controlOut(ep_id, sud, null, null);
+    }
+
     /// Start the initialization of the USB device.
     pub fn start_device_init(self: *Self) !void {
         if (self.phase != .NotAddressed) {
@@ -138,8 +159,8 @@ pub const UsbDevice = struct {
 
     /// TODO: doc
     fn init_second(self: *Self, buf: []u8) !void {
-        const first_desc: *descs.ConfigurationDescriptor = @alignCast(@ptrCast(buf.ptr));
-        if (first_desc.descriptor_type != .Configuration) {
+        const config_desc: *descs.ConfigurationDescriptor = @alignCast(@ptrCast(buf.ptr));
+        if (config_desc.descriptor_type != .Configuration) {
             return UsbDeviceError.InvalidDescriptor;
         }
         if (self.phase != .Phase2) {
@@ -168,7 +189,7 @@ pub const UsbDevice = struct {
                 if (p.?[1] != @intFromEnum(descs.DescriptorType.Endpoint)) continue;
                 const ep_desc: *align(1) descs.EndpointDescriptor = @alignCast(@ptrCast(p));
                 const ep_info = endpoint.EndpointInfo.new(ep_desc.*);
-                self.endpoint_configs[ep_info.ep_id.addr()] = ep_info;
+                self.endpoint_configs[num_found_eps] = ep_info;
                 self.class_drivers[ep_info.ep_id.addr()] = class_driver;
                 num_found_eps += 1;
             }
@@ -182,7 +203,10 @@ pub const UsbDevice = struct {
         self.phase = .Phase3;
         log.debug("Requesting to set the configuration.", .{});
 
-        // TODO: unimplemented: set configuration
+        try self.setConfiguration(
+            endpoint.default_control_pipe_id,
+            config_desc.configuration_value,
+        );
     }
 
     /// Handle the transfer event.
@@ -278,6 +302,74 @@ pub const UsbDevice = struct {
         _ = self.setup_trb_map.remove(issuer_trb);
     }
 
+    fn controlOut(
+        self: *Self,
+        ep_id: endpoint.EndpointId,
+        sud: setupdata.SetupData,
+        buf: ?[]u8,
+        issuer: ?*ClassDriver,
+    ) !void {
+        _ = issuer; // autofix
+
+        if (15 < ep_id.number) {
+            return UsbDeviceError.InvalidEndpointId;
+        }
+
+        const dci = ep_id.addr();
+        const tr = self.dev.transfer_rings[dci - 1] orelse return UsbDeviceError.TransferRingUnavailable;
+
+        var status_trb = trbs.StatusStageTrb{
+            .ioc = false,
+            .dir = .Out,
+        };
+        if (buf) |b| {
+            var setup_trb = trbs.SetupStageTrb{
+                .bm_request_type = @bitCast(sud.bm_request_type),
+                .b_request = @intFromEnum(sud.b_request),
+                .w_value = sud.w_value,
+                .w_index = sud.w_index,
+                .w_length = sud.w_length,
+                .trt = .OutDataStage,
+                .interrupter_target = 0, // TODO
+            };
+            var data_trb = trbs.DataStageTrb{
+                .trb_buffer_pointer = @intFromPtr(b.ptr),
+                .trb_transfer_length = @truncate(b.len),
+                .td_size = 0,
+                .dir = .Out,
+                .ioc = true,
+                .interrupter_target = 0, // TODO
+            };
+
+            const ptr_setup_trb = tr.push(@ptrCast(&setup_trb));
+            const ptr_data_trb = tr.push(@ptrCast(&data_trb));
+            _ = tr.push(@ptrCast(&status_trb));
+
+            try self.setup_trb_map.put(@ptrCast(ptr_data_trb), @ptrCast(ptr_setup_trb));
+        } else {
+            var setup_trb = trbs.SetupStageTrb{
+                .bm_request_type = @bitCast(sud.bm_request_type),
+                .b_request = @intFromEnum(sud.b_request),
+                .w_value = sud.w_value,
+                .w_index = sud.w_index,
+                .w_length = sud.w_length,
+                .trt = .NoDataStage,
+                .interrupter_target = 0,
+            };
+            status_trb.ioc = true;
+
+            const ptr_setup_trb = tr.push(@ptrCast(&setup_trb));
+            const ptr_status_trb = tr.push(@ptrCast(&status_trb));
+
+            try self.setup_trb_map.put(@ptrCast(ptr_status_trb), @ptrCast(ptr_setup_trb));
+        }
+
+        self.db.write(.{
+            .db_stream_id = 0,
+            .db_target = @intCast(dci),
+        });
+    }
+
     fn controlIn(
         self: *Self,
         ep_id: endpoint.EndpointId,
@@ -311,9 +403,6 @@ pub const UsbDevice = struct {
         };
         const ptr_data_trb = tr.push(@ptrCast(&data_trb));
         var status_trb = trbs.StatusStageTrb{
-            .interrupter_target = 0,
-            .ent = false,
-            .ch = false,
             .ioc = false,
             .dir = .In,
         };

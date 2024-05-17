@@ -205,18 +205,18 @@ pub const StatusStageTrb = packed struct(u128) {
     /// Reserved.
     _reserved1: u86 = 0,
     /// Interrupter Target.
-    interrupter_target: u10,
+    interrupter_target: u10 = 0,
 
     /// Cycle bit.
     cycle_bit: u1 = 1,
     /// Evaluate Next TRB.
-    ent: bool,
+    ent: bool = false,
     /// Reserved.
     _reserved2: u2 = 0,
     /// Chain Bit.
-    ch: bool,
+    ch: bool = false,
     /// Interrupt On Completion.
-    ioc: bool,
+    ioc: bool = false,
     _reserved3: u4 = 0,
     /// TRB Type.
     trb_type: TrbType = .StatusStage,
