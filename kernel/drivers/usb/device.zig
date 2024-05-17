@@ -141,26 +141,24 @@ pub const UsbDevice = struct {
 
         self.phase = .Phase3;
 
-        var bytes_consumed: usize = 0;
-        while (bytes_consumed <= buf.len) {
-            var p = buf[bytes_consumed..].ptr;
+        // Read the interface descriptors and endpoint descriptors
+        // to find devices of supported classes.
+        var reader = DescReader.new(buf);
+        var p: ?[*]u8 = buf.ptr;
+        while (p != null) : (p = reader.next()) {
             const if_desc: *align(1) descs.InterfaceDescriptor = @alignCast(@ptrCast(p));
-            log.debug("p = {*}", .{p});
-            bytes_consumed += if_desc.length;
-            p += if_desc.length;
-
             if (if_desc.descriptor_type != .Interface) {
                 continue;
             }
 
             const class_driver = class.newClassDriver(self, if_desc.*) catch continue; // TODO;
             _ = class_driver; // autofix
-            for (0..if_desc.num_endpoints) |_| {
-                if (p[1] != @intFromEnum(descs.DescriptorType.Endpoint)) continue;
+            var num_found_eps: usize = 0;
+            while (num_found_eps < if_desc.num_endpoints and p != null) : (p = reader.next()) {
+                if (p.?[1] != @intFromEnum(descs.DescriptorType.Endpoint)) continue;
                 const ep_desc: *align(1) descs.EndpointDescriptor = @alignCast(@ptrCast(p));
-                bytes_consumed += ep_desc.length;
-                p += ep_desc.length;
-                log.debug("{?}", .{ep_desc});
+                _ = ep_desc; // autofix
+                num_found_eps += 1;
 
                 // TODO: unimplemented: handle the endpoint descriptor
             }
@@ -318,4 +316,26 @@ const InitializationPhase = enum(u8) {
     Phase2,
     Phase3,
     Complete,
+};
+
+/// Reader for USB interface descriptors and endpoint descriptors.
+const DescReader = struct {
+    buf: []u8,
+    p: [*]u8,
+
+    /// Create a new descriptor reader.
+    pub fn new(buf: []u8) DescReader {
+        return DescReader{ .buf = buf, .p = buf.ptr };
+    }
+
+    /// Get the next descriptor.
+    /// Note that the first descriptor is never returned.
+    pub fn next(self: *DescReader) ?[*]u8 {
+        self.p += self.p[0];
+        if (@intFromPtr(self.p) > @intFromPtr(self.buf.ptr) + self.buf.len) {
+            return null;
+        } else {
+            return self.p[0..];
+        }
+    }
 };
