@@ -209,6 +209,24 @@ pub const UsbDevice = struct {
         );
     }
 
+    /// Configure all endpoints included in the configuration.
+    fn init_third(self: *Self, sud: setupdata.SetupData) !void {
+        if (sud.b_request != .SetConfiguration) {
+            return UsbDeviceError.InvalidDescriptor;
+        }
+        if (self.phase != .Phase3) {
+            return UsbDeviceError.InvalidPhase;
+        }
+
+        for (0..self.num_config) |i| {
+            const ep_info = self.endpoint_configs[i].?;
+            const driver = &self.class_drivers[ep_info.ep_id.addr()].?;
+            driver.setEndpoint(ep_info);
+        }
+
+        self.phase = .Complete;
+    }
+
     /// Handle the transfer event.
     pub fn onTransferEventReceived(
         self: *Self,
@@ -261,9 +279,6 @@ pub const UsbDevice = struct {
         sud: setupdata.SetupData,
         buf: ?[]u8,
     ) !void {
-        _ = sud; // autofix
-        _ = ep_id; // autofix
-
         switch (self.phase) {
             .NotAddressed => @panic("onControlComplete is called while the initialization has not started."),
             .Phase1 => {
@@ -281,6 +296,10 @@ pub const UsbDevice = struct {
                 } else {
                     return UsbDeviceError.InvalidPhase;
                 }
+            },
+            .Phase3 => {
+                try self.init_third(sud);
+                log.info("Device initialization completed: EPID={?}.", .{ep_id});
             },
             else => @panic("Unimplemented: onControlComplete"),
         }
