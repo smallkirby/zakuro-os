@@ -7,7 +7,7 @@ const Allocator = std.mem.Allocator;
 const zakuro = @import("zakuro");
 const UsbDevice = zakuro.drivers.usb.device.UsbDevice;
 
-/// USB HID mouse class driver.
+/// USB HID keyboard class driver.
 pub const MouseDriver = struct {
     const Self = @This();
 

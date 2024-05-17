@@ -7,6 +7,7 @@ const descriptor = @import("descriptor.zig");
 const setupdata = @import("setupdata.zig");
 const descs = @import("descriptor.zig");
 const class = @import("class.zig");
+const ClassDriver = @import("class/driver.zig").ClassDriver;
 const XhciDevice = @import("xhci/device.zig").XhciDevice;
 const trbs = @import("xhci/trb.zig");
 const regs = @import("xhci/register.zig");
@@ -32,6 +33,8 @@ pub const UsbDeviceError = error{
 
 /// USB device.
 pub const UsbDevice = struct {
+    pub const max_num_eps = 16;
+
     /// General purpose buffer for this device.
     /// Any alignment is allowed.
     buffer: [256]u8 = [_]u8{0} ** 256,
@@ -45,6 +48,10 @@ pub const UsbDevice = struct {
     config_index: u8,
     /// Number of configuration descriptors this device has.
     num_config: u8,
+    /// Class drivers for each endpoints.
+    class_drivers: [max_num_eps]?ClassDriver = [_]?ClassDriver{null} ** max_num_eps,
+    /// Information of each endpoints.
+    endpoint_configs: [max_num_eps]?endpoint.EndpointInfo = [_]?endpoint.EndpointConfig{null} ** max_num_eps,
 
     /// Map that associate SetupStageTrb with DataStageTrb.
     setup_trb_map: SetupTrbMap,
@@ -139,32 +146,43 @@ pub const UsbDevice = struct {
             return UsbDeviceError.InvalidPhase;
         }
 
-        self.phase = .Phase3;
-
         // Read the interface descriptors and endpoint descriptors
         // to find devices of supported classes.
         var reader = DescReader.new(buf);
         var p: ?[*]u8 = buf.ptr;
+        var if_found = false;
+
         while (p != null) : (p = reader.next()) {
             const if_desc: *align(1) descs.InterfaceDescriptor = @alignCast(@ptrCast(p));
             if (if_desc.descriptor_type != .Interface) {
                 continue;
             }
 
-            const class_driver = class.newClassDriver(self, if_desc.*) catch continue; // TODO;
-            _ = class_driver; // autofix
+            // Create a class driver from the found interface descriptor.
+            const class_driver = class.newClassDriver(self, if_desc.*, self.allocator) catch continue; // TODO;
             var num_found_eps: usize = 0;
+            if_found = true;
+
+            // Find all endpoints associated with the interface.
             while (num_found_eps < if_desc.num_endpoints and p != null) : (p = reader.next()) {
                 if (p.?[1] != @intFromEnum(descs.DescriptorType.Endpoint)) continue;
                 const ep_desc: *align(1) descs.EndpointDescriptor = @alignCast(@ptrCast(p));
-                _ = ep_desc; // autofix
+                const ep_info = endpoint.EndpointInfo.new(ep_desc.*);
+                self.endpoint_configs[ep_info.ep_id.addr()] = ep_info;
+                self.class_drivers[ep_info.ep_id.addr()] = class_driver;
                 num_found_eps += 1;
-
-                // TODO: unimplemented: handle the endpoint descriptor
             }
+
+            // We suppose that there is only one interface for each device.
+            break;
         }
 
-        // TODO: unimplemented: increment the phase
+        if (!if_found) return;
+
+        self.phase = .Phase3;
+        log.debug("Requesting to set the configuration.", .{});
+
+        // TODO: unimplemented: set configuration
     }
 
     /// Handle the transfer event.
