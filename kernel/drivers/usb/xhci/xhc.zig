@@ -35,7 +35,7 @@ const num_device_slots = 8;
 
 /// Buffer used by fixed-size allocator.
 /// TODO: use kernel allocator whin it's ready.
-var general_buf = [_]u8{0} ** (4096 * 20);
+var general_buf = [_]u8{0} ** (4096 * 30);
 /// TODO: use kernel allocator whin it's ready.
 var fsa = std.heap.FixedBufferAllocator.init(&general_buf);
 
@@ -185,7 +185,7 @@ pub const Controller = struct {
         const primary_interrupter: *volatile Regs.InterrupterRegisterSet = self.getPrimaryInterrupter();
         var new_interrupter = primary_interrupter.*;
         new_interrupter.erstsz = 1;
-        new_interrupter.erdp = (@intFromPtr(self.event_ring.trbs.ptr) & ~@as(u64, 0b111)) | (primary_interrupter.erdp & 0b111);
+        new_interrupter.erdp = (@intFromPtr(self.event_ring.trbs.ptr) & ~@as(u64, 0b1111)) | (primary_interrupter.erdp & 0b1111);
         new_interrupter.erstba = @intFromPtr(self.event_ring.erst.ptr);
         primary_interrupter.* = new_interrupter;
         self.event_ring.interrupter = primary_interrupter;
@@ -521,8 +521,12 @@ pub const Controller = struct {
             .Resetting => self.enableSlot(target_port),
             else => {
                 log.err(
-                    "Port status invalid while the port status change event is received: index={d}, current={?}",
-                    .{ port_id, self.port_states[port_id] },
+                    "Port status invalid while the port status change event is received: index={d}, current={?}, {?}",
+                    .{
+                        port_id,
+                        self.port_states[port_id],
+                        self.getPortAt(port_id).prs.portsc.read(),
+                    },
                 );
                 return XhcError.InvalidState;
             },

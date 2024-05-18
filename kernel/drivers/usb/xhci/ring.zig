@@ -68,8 +68,6 @@ pub const EventRing = struct {
     trbs: []Trb = undefined,
     /// Cycle Bit for Producer Cycle State.
     pcs: u1 = 1,
-    /// Next index to write to.
-    index: usize = 0,
     /// Event Ring Segment Table.
     erst: *[1]EventRingSegmentTableEntry = undefined,
     /// Interrupter Register Set that this Event Ring belongs to.

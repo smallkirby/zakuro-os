@@ -4,6 +4,7 @@ const std = @import("std");
 const zakuro = @import("zakuro");
 const UsbDevice = zakuro.drivers.usb.device.UsbDevice;
 const EndpoinInfo = zakuro.drivers.usb.endpoint.EndpointInfo;
+const EndpointId = zakuro.drivers.usb.endpoint.EndpointId;
 const default_control_pipe_id = zakuro.drivers.usb.endpoint.default_control_pipe_id;
 const SetupData = zakuro.drivers.usb.setupdata.SetupData;
 const log = std.log.scoped(.uclass);
@@ -13,6 +14,8 @@ pub const ClassDriverError = error{
     AllocationFailed,
     /// Invalid phase
     InvalidPhase,
+    /// The feature is not supported.
+    Unimplemented,
 };
 
 pub const ClassDriver = @This();
@@ -39,7 +42,10 @@ phase: Phase = .NotInitialized,
 buffer: [buffer_size]u8 = [_]u8{0} ** buffer_size,
 const buffer_size = 1024;
 
-pub const VTable = struct {};
+pub const VTable = struct {
+    /// Set the endpoint ID of the class driver.
+    onDataReceived: *const fn (ctx: *anyopaque, buf: []u8) void,
+};
 
 /// Set the endpoint ID of the class driver.
 pub fn setEndpoint(self: *Self, ep_config: EndpoinInfo) void {
@@ -76,6 +82,16 @@ pub fn onControlComplete(self: *Self) !void {
 
     self.phase = .Phase2;
     try self.device.interruptIn(self.ep_intr_in.ep_id, self.buffer[0..self.in_packed_size]);
+}
+
+/// TODO: doc
+pub fn onInterruptComplete(self: *Self, ep_id: EndpointId, buf: []u8) !void {
+    if (ep_id.direction != .In) {
+        return ClassDriverError.Unimplemented;
+    }
+    self.vtable.onDataReceived(self.ptr, buf);
+
+    try self.device.interruptIn(ep_id, buf[0..self.in_packed_size]);
 }
 
 const Phase = enum {

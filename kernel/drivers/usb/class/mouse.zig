@@ -6,6 +6,7 @@ const Error = @import("driver.zig").ClassDriverError;
 const Allocator = std.mem.Allocator;
 const zakuro = @import("zakuro");
 const UsbDevice = zakuro.drivers.usb.device.UsbDevice;
+const log = std.log.scoped(.mouse);
 
 /// USB HID mouse class driver.
 pub const MouseDriver = struct {
@@ -21,7 +22,17 @@ pub const MouseDriver = struct {
             .device = dev,
             .if_index = if_index,
             .in_packed_size = 3,
-            .vtable = &.{},
+            .vtable = &.{
+                .onDataReceived = Self.onDataReceived,
+            },
         };
+    }
+
+    fn onDataReceived(ctx: *anyopaque, buf: []u8) void {
+        const self: *Self = @ptrCast(ctx);
+        _ = self; // autofix
+        const displacement_x: i8 = @bitCast(buf[1]);
+        const displacement_y: i8 = @bitCast(buf[2]);
+        log.debug("Mouse moved by ({}, {})", .{ displacement_x, displacement_y });
     }
 };

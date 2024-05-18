@@ -13,6 +13,7 @@ const ClassError = error{
     UnsupportedClass,
     AllocationFailed,
     InvalidPhase,
+    Unknown,
 };
 
 /// Get a new class driver.
@@ -31,6 +32,7 @@ pub fn newClassDriver(
             ) catch |err| switch (err) {
                 DriverError.AllocationFailed => ClassError.AllocationFailed,
                 DriverError.InvalidPhase => ClassError.InvalidPhase,
+                else => ClassError.Unknown,
             };
         }
     }
