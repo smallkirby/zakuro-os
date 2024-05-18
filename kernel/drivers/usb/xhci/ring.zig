@@ -95,7 +95,7 @@ pub const EventRing = struct {
         const end: *volatile Trb = @ptrFromInt(self.erst[0].ring_segment_base_addr + self.erst[0].size * @sizeOf(Trb));
         if (p == end) {
             p = begin;
-            self.pcs +|= 1;
+            self.pcs +%= 1;
         }
 
         // Set ERDP
