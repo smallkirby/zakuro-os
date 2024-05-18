@@ -4,6 +4,9 @@ const std = @import("std");
 const zakuro = @import("zakuro");
 const UsbDevice = zakuro.drivers.usb.device.UsbDevice;
 const EndpoinInfo = zakuro.drivers.usb.endpoint.EndpointInfo;
+const default_control_pipe_id = zakuro.drivers.usb.endpoint.default_control_pipe_id;
+const SetupData = zakuro.drivers.usb.setupdata.SetupData;
+const log = std.log.scoped(.uclass);
 
 pub const ClassDriverError = error{
     /// Failed to allocater memory.
@@ -34,4 +37,21 @@ pub fn setEndpoint(self: *Self, ep_config: EndpoinInfo) void {
     } else if (ep_config.ep_type == .Interrupt and ep_config.ep_id.direction == .Out) {
         self.ep_intr_out = ep_config;
     }
+}
+
+/// Enable boot protocol.
+pub fn onEndpointConfigured(self: *Self) !void {
+    const sud = SetupData{
+        .bm_request_type = .{
+            .dtd = .Out,
+            .type = .Class,
+            .recipient = .Interface,
+        },
+        .b_request = .SetInterface,
+        .w_value = 0, // boot protocol
+        .w_index = self.if_index,
+        .w_length = 0,
+    };
+
+    try self.device.controlOut(default_control_pipe_id, sud, null, self);
 }

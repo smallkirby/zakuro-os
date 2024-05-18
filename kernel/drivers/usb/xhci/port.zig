@@ -71,4 +71,8 @@ pub const PortState = enum(u8) {
     Addressing,
     /// Undergoing initializing device.
     InitializingDevice,
+    /// Undergoing configuring endpoint.
+    ConfiguringEndpoint,
+    /// Complete.
+    Complete,
 };

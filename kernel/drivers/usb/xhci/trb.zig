@@ -255,6 +255,27 @@ pub const TransferEventTrb = packed struct(u128) {
     slot_id: u8,
 };
 
+pub const ConfigureEndpointCommandTrb = packed struct(u128) {
+    /// Input Context Pointer.
+    input_context_pointer: u64,
+
+    /// Reserved.
+    _reserved1: u32 = 0,
+
+    /// Cycle bit.
+    cycle_bit: u1 = 1,
+    /// Reserved.
+    _reserved2: u8 = 0,
+    /// Deconfigure.
+    dc: u1 = 0,
+    /// Type of TRB.
+    trb_type: TrbType = .ConfigureEndpointCommand,
+    /// Reserved.
+    _reserved3: u8 = 0,
+    /// Slot ID.
+    slot_id: u8 = 0,
+};
+
 /// Type ID of TRB.
 pub const TrbType = enum(u6) {
     Reserved = 0,
@@ -268,6 +289,7 @@ pub const TrbType = enum(u6) {
     EnableSlotCommand = 9,
     // ...
     AddressDeviceCommand = 11,
+    ConfigureEndpointCommand = 12,
     // ...
     Transfer = 32,
     CommandCompletion = 33,

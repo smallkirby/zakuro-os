@@ -1,6 +1,7 @@
 //! This module provides a context structures for xHC.
 
 const std = @import("std");
+const PortSpeed = @import("register.zig").PortSpeed;
 
 /// Device Context that is transferred to the xHC to report the state of a device.
 /// TODO: Should be a packed or extern struct.
@@ -24,6 +25,12 @@ pub const InputContext = struct {
         const ptr = std.mem.asBytes(&self.icc);
         @memset(ptr[0..@sizeOf(@TypeOf(self.icc))], 0);
     }
+
+    /// Enable the endpoint.
+    pub fn enableEndpoint(self: *Self, ctx_index: u32) *EndpointContext {
+        self.icc.add_context_flag |= @as(u32, 1) << @as(u5, @truncate(ctx_index));
+        return &self.endpoint_context[ctx_index - 1];
+    }
 };
 
 /// Slot Context that defines entire configuration of the slot.
@@ -31,7 +38,7 @@ const SlotContext = packed struct(u256) {
     /// Route String that is used by hubs to route packets to the correct downstream port.
     route_string: u20,
     /// Deprecated.
-    _speed: u4,
+    _speed: PortSpeed,
     /// Reserved.
     _reserved1: u1,
     /// Multi-TT.

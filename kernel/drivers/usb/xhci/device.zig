@@ -2,6 +2,7 @@
 //! Note that this device is at lower level than the USB Device.
 
 const std = @import("std");
+const PortSpeed = @import("register.zig").PortSpeed;
 const Allocator = std.mem.Allocator;
 const contexts = @import("context.zig");
 const DeviceContext = contexts.DeviceContext;
@@ -39,6 +40,10 @@ pub const XhciDevice = struct {
         self.transfer_rings[dci - 1] = tr;
         return tr;
     }
+
+    pub fn enableSlotContext(self: *Self) void {
+        self.input_context.icc.add_context_flag |= 1;
+    }
 };
 
 /// Direction of the Endpoint Context.
@@ -62,10 +67,10 @@ pub fn calcDci(ep_index: u8, direction: EpContextDirection) u5 {
 }
 
 /// Calculate the Max Packet Size from the slot speed.
-pub fn calcMaxPacketSize(slot_speed: u8) u16 {
+pub fn calcMaxPacketSize(slot_speed: PortSpeed) u16 {
     return switch (slot_speed) {
-        4 => 512,
-        3 => 64,
+        .SuperSpeed => 512,
+        .HighSpeed => 64,
         else => 8,
     };
 }

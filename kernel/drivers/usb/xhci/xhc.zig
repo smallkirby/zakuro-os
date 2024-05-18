@@ -26,6 +26,8 @@ pub const XhcError = error{
     InvalidSlot,
     /// xHC failed to process the Transfer.
     TransferFailed,
+    /// xHC has invalid configuration.
+    InvalidConfiguration,
 };
 
 /// Maximum number of device slots supported by this driver.
@@ -356,13 +358,78 @@ pub const Controller = struct {
         try device.start_device_init();
     }
 
+    /// TODO: doc
+    fn configureEndpoint(self: *Self, udev: *usb.device.UsbDevice) !void {
+        const configs = udev.endpoint_configs;
+        const num_configs = udev.num_config;
+        const port_id = udev.dev.device_context.slot_context.root_hub_port_num;
+        const port_speed = self.getPortAt(port_id).prs.portsc.read().speed;
+
+        @memset(std.mem.asBytes(&udev.dev.input_context.icc), 0);
+        @memcpy(
+            std.mem.asBytes(&udev.dev.input_context.sc),
+            std.mem.asBytes(&udev.dev.device_context.slot_context),
+        );
+
+        udev.dev.enableSlotContext();
+        udev.dev.input_context.sc.context_entries = 31;
+
+        if (port_speed != .HighSpeed) {
+            log.err("Unsupported port speed: {?}", .{port_speed});
+            @panic("Aborting...");
+        }
+
+        for (0..num_configs) |i| {
+            const ep_dci = configs[i].?.ep_id.addr();
+            const ep_ctx = udev.dev.input_context.enableEndpoint(ep_dci);
+
+            switch (configs[i].?.ep_type) {
+                .Interrupt => ep_ctx.ep_type = if (configs[i].?.ep_id.direction == .In) 7 else 3,
+                else => {
+                    log.err("Unsupported endpoint type: {?}", .{configs[i].?.ep_type});
+                    @panic("Aborting...");
+                },
+            }
+            ep_ctx.max_packet_size = @intCast(configs[i].?.max_packet_size);
+            ep_ctx.interval = @truncate(configs[i].?.interval - 1);
+            ep_ctx.average_trb_length = 1;
+
+            const tr = udev.dev.allocTransferRing(ep_dci, 32, self.allocator);
+            ep_ctx.tr_dequeue_pointer = @truncate(@intFromPtr(tr.trbs.ptr) >> 4);
+
+            ep_ctx.dcs = 1;
+            ep_ctx.max_pstreams = 0;
+            ep_ctx.mult = 0;
+            ep_ctx.cerr = 3;
+        }
+
+        self.port_states[port_id] = .ConfiguringEndpoint;
+
+        var cec_trb = trbs.ConfigureEndpointCommandTrb{
+            .slot_id = @truncate(udev.dev.slot_id),
+            .input_context_pointer = @intFromPtr(&udev.dev.input_context),
+        };
+        _ = self.cmd_ring.push(@ptrCast(&cec_trb));
+        self.notify_doorbell(0);
+    }
+
+    /// Complete the configuration of endpoints.
+    fn completeConfiguration(
+        self: *Self,
+        udev: *usb.device.UsbDevice,
+        port_id: u8,
+    ) !void {
+        try udev.onEndpointConfigured();
+        self.port_states[port_id] = .Complete;
+    }
+
     /// Handle an Transfer Event.
     fn onTransfer(
         self: *Self,
         trb: *volatile trbs.TransferEventTrb,
     ) !void {
         const slot_id = trb.slot_id;
-        const dev = self.dev_controller.devices[slot_id] orelse return XhcError.InvalidSlot;
+        const udev = self.dev_controller.devices[slot_id] orelse return XhcError.InvalidSlot;
 
         // Check if the completion code is valid.
         switch (trb.completion_code) {
@@ -370,9 +437,14 @@ pub const Controller = struct {
             else => return XhcError.TransferFailed,
         }
 
-        try dev.onTransferEventReceived(trb);
+        // Handle the Transfer Event.
+        try udev.onTransferEventReceived(trb);
 
-        // TODO: unimplemented: start config of the device after initialization.
+        // If the device is initialized, configure the endpoint.
+        const port_id = udev.dev.device_context.slot_context.root_hub_port_num;
+        if (udev.phase == .Complete and self.port_states[port_id] == .InitializingDevice) {
+            try self.configureEndpoint(udev);
+        }
     }
 
     /// Handle an Command Completion Event.
@@ -413,8 +485,19 @@ pub const Controller = struct {
 
                 try self.initializeUsbDevice(port_id, slot_id);
             },
+            .ConfigureEndpointCommand => {
+                const device = self.dev_controller.devices[slot_id] orelse {
+                    return XhcError.InvalidSlot;
+                };
+                const port_id = device.dev.device_context.slot_context.root_hub_port_num;
+                if (self.port_states[port_id] != .ConfiguringEndpoint) {
+                    return XhcError.InvalidState;
+                }
+
+                try self.completeConfiguration(device, port_id);
+            },
             else => {
-                log.err("Unsupported TRB command is completed.", .{});
+                log.err("Unsupported TRB command is completed: {?}", .{issuer_type});
                 return XhcError.InvalidState;
             },
         }

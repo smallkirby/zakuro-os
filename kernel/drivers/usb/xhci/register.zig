@@ -78,7 +78,7 @@ const PortStatusControlRegister = packed struct(u32) {
     /// Port Power.
     pp: bool,
     /// Port Speed.
-    speed: u4,
+    speed: PortSpeed,
     /// Port Indicator Control.
     pic: u2,
     /// Port Link State Write Strobe.
@@ -113,6 +113,15 @@ const PortStatusControlRegister = packed struct(u32) {
     dr: bool,
     /// Warm Port Reset.
     wpr: bool,
+};
+
+pub const PortSpeed = enum(u4) {
+    Invalid = 0,
+    FullSpeed = 1,
+    LowSpeed = 2,
+    HighSpeed = 3,
+    SuperSpeed = 4,
+    SuperSpeedPlus = 5,
 };
 
 /// USB Command Register. (USBCMD)
