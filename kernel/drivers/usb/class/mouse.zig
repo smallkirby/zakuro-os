@@ -8,6 +8,9 @@ const zakuro = @import("zakuro");
 const UsbDevice = zakuro.drivers.usb.device.UsbDevice;
 const log = std.log.scoped(.mouse);
 
+/// Observer for the mouse movements.
+pub var mouse_observer: ?*const MouseObserver = null;
+
 /// USB HID mouse class driver.
 pub const MouseDriver = struct {
     const Self = @This();
@@ -29,10 +32,31 @@ pub const MouseDriver = struct {
     }
 
     fn onDataReceived(ctx: *anyopaque, buf: []u8) void {
-        const self: *Self = @ptrCast(ctx);
-        _ = self; // autofix
+        _ = ctx;
+
         const displacement_x: i8 = @bitCast(buf[1]);
         const displacement_y: i8 = @bitCast(buf[2]);
-        log.debug("Mouse moved by ({}, {})", .{ displacement_x, displacement_y });
+        if (mouse_observer) |observer| {
+            observer.onMove(displacement_x, displacement_y);
+        }
+    }
+};
+
+/// Observer for the mouse driver.
+/// The observer can be notified when the mouse moves.
+pub const MouseObserver = struct {
+    /// Instance of the observer.
+    ptr: *anyopaque,
+    /// vtable for the observer.
+    vtable: VTable,
+
+    const Self = @This();
+    const VTable = struct {
+        /// Called when the mouse moves.
+        onMove: *const fn (*anyopaque, i8, i8) void,
+    };
+
+    pub fn onMove(self: *const Self, displacement_x: i8, displacement_y: i8) void {
+        self.vtable.onMove(self.ptr, displacement_x, displacement_y);
     }
 };

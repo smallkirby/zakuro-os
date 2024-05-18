@@ -3,14 +3,7 @@
 const zakuro = @import("zakuro");
 const font = zakuro.font;
 const colors = zakuro.color;
-
-/// 2D vector.
-pub fn Vector(comptime T: type) type {
-    return struct {
-        x: T,
-        y: T,
-    };
-}
+const Vector = zakuro.Vector;
 
 /// Pixel data format defined by UEFI.
 pub const PixelFormat = enum(u8) {
@@ -32,35 +25,6 @@ pub const PixelColor = struct {
     red: u8,
     green: u8,
     blue: u8,
-};
-
-/// Width of the mouse cursor.
-const mouse_cursor_width = 12;
-/// Height of the mouse cursor.
-const mouse_cursor_height = 21;
-/// Mouse cursor shape data.
-const mouse_shape = [mouse_cursor_height]*const [mouse_cursor_width:0]u8{
-    ".           ",
-    "..          ",
-    ".@.         ",
-    ".@@.        ",
-    ".@@@.       ",
-    ".@@@@.      ",
-    ".@@@@@.     ",
-    ".@@@@@@.    ",
-    ".@@@@@@@.   ",
-    ".@@@@@@@@.  ",
-    ".@@@@@@@@@. ",
-    ".@@@@@@@....",
-    ".@@@@@@@.   ",
-    ".@@@@@@.    ",
-    ".@@@.@@.    ",
-    ".@@..@@@.   ",
-    ".@. .@@@.   ",
-    "..   .@@@.  ",
-    ".    .@@@.  ",
-    "      .@@.  ",
-    "       ...  ",
 };
 
 /// Pixel writer to write a pixel color to the framebuffer.
@@ -146,31 +110,6 @@ pub const PixelWriter = struct {
         }
     }
 
-    /// Draw a mouse cursor at the specified position.
-    pub fn drawMouse(self: Self, pos: Vector(u32)) void {
-        for (0..mouse_cursor_height) |y| {
-            for (0..mouse_cursor_width) |x| {
-                switch (mouse_shape[y][x]) {
-                    '@' => {
-                        self.writePixel(
-                            @truncate(pos.x + x),
-                            @truncate(pos.y + y),
-                            colors.Black,
-                        );
-                    },
-                    '.' => {
-                        self.writePixel(
-                            @truncate(pos.x + x),
-                            @truncate(pos.y + y),
-                            colors.White,
-                        );
-                    },
-                    else => {},
-                }
-            }
-        }
-    }
-
     /// Write a pixel color to the specified position in RGB format.
     fn writePixelRgb(self: Self, x: u32, y: u32, color: PixelColor) void {
         const addr = pixelAt(self.config, x, y);
@@ -190,7 +129,7 @@ pub const PixelWriter = struct {
     /// Get the address of the framebuffer at the specified pixel.
     /// Note that this function does not perform bounds checking.
     fn pixelAt(config: *FrameBufferConfig, x: u32, y: u32) [*]u8 {
-        const rel_pos = config.pixels_per_scan_line * y + x;
-        return @ptrCast(&config.frame_buffer[rel_pos * 4]);
+        const rel_pos = config.pixels_per_scan_line *| y +| x;
+        return @ptrCast(&config.frame_buffer[rel_pos *| 4]);
     }
 };

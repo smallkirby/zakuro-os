@@ -10,6 +10,7 @@ const graphics = zakuro.graphics;
 const color = zakuro.color;
 const pci = zakuro.pci;
 const drivers = zakuro.drivers;
+const mouse = zakuro.mouse;
 
 /// Override panic impl
 pub const panic = @import("panic.zig").panic_fn;
@@ -57,7 +58,12 @@ export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) n
         con.print("{d}: {s}\n", .{ i, "Hello from console...!" });
     }
 
-    pixel_writer.drawMouse(.{ .x = 100, .y = 200 });
+    var cursor = mouse.MouseCursor{
+        .ecolor = color.White,
+        .pos = .{ .x = 100, .y = 100 },
+        .writer = &pixel_writer,
+    };
+    cursor.drawMouse();
 
     // Register PCI devices.
     pci.registerAllDevices() catch |err| switch (err) {
@@ -122,6 +128,8 @@ export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) n
         }
     }
 
+    const mouse_observer = cursor.observer();
+    zakuro.drivers.usb.cls_mouse.mouse_observer = &mouse_observer;
     while (true) {
         xhc.processEvent() catch |err| {
             log.err("Failed to process event: {?}", .{err});

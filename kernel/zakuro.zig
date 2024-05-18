@@ -10,6 +10,15 @@ pub const arch = @import("arch.zig").impl;
 pub const font = @import("font.zig");
 pub const drivers = @import("drivers.zig");
 pub const mmio = @import("mmio.zig");
+pub const mouse = @import("mouse.zig");
+
+/// 2D vector.
+pub fn Vector(comptime T: type) type {
+    return struct {
+        x: T,
+        y: T,
+    };
+}
 
 test {
     const std = @import("std");
