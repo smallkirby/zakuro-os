@@ -12,6 +12,7 @@ pub const mouse = @import("class/mouse.zig");
 const ClassError = error{
     UnsupportedClass,
     AllocationFailed,
+    InvalidPhase,
 };
 
 /// Get a new class driver.
@@ -29,6 +30,7 @@ pub fn newClassDriver(
                 allocator,
             ) catch |err| switch (err) {
                 DriverError.AllocationFailed => ClassError.AllocationFailed,
+                DriverError.InvalidPhase => ClassError.InvalidPhase,
             };
         }
     }

@@ -29,6 +29,8 @@ pub const UsbDeviceError = error{
     InvalidDescriptor,
     /// Invalid initialization phase.
     InvalidPhase,
+    /// No event waiter
+    NoWaiter,
 };
 
 /// USB device.
@@ -131,6 +133,30 @@ pub const UsbDevice = struct {
         };
 
         try self.controlOut(ep_id, sud, null, null);
+    }
+
+    /// TODO: doc
+    pub fn interruptIn(
+        self: *Self,
+        ep_id: endpoint.EndpointId,
+        buf: []u8,
+    ) !void {
+        const ep_dci = ep_id.addr();
+        const tr = self.dev.transfer_rings[ep_dci - 1] orelse return UsbDeviceError.TransferRingUnavailable;
+
+        var normal_trb = trbs.NormalTrb{
+            .data_buf_ptr = @intFromPtr(buf.ptr),
+            .trb_transfer_length = @truncate(buf.len),
+            .ioc = true,
+            .isp = true,
+            .interrupter_target = 0, // TODO
+        };
+        _ = tr.push(@ptrCast(&normal_trb));
+
+        self.db.write(.{
+            .db_stream_id = 0,
+            .db_target = @intCast(ep_dci),
+        });
     }
 
     /// Start the initialization of the USB device.
@@ -299,6 +325,11 @@ pub const UsbDevice = struct {
         sud: setupdata.SetupData,
         buf: ?[]u8,
     ) !void {
+        if (self.phase == .Complete) {
+            const waiter = self.popCorrespondingWaiter(sud) catch return UsbDeviceError.NoWaiter;
+            return try waiter.onControlComplete();
+        }
+
         switch (self.phase) {
             .NotAddressed => @panic("onControlComplete is called while the initialization has not started."),
             .Phase1 => {
@@ -334,6 +365,15 @@ pub const UsbDevice = struct {
         const trb = self.setup_trb_map.get(issuer_trb) orelse return UsbDeviceError.NoCorrespondingSetupTrb;
         _ = self.setup_trb_map.remove(issuer_trb);
         return @ptrCast(trb);
+    }
+
+    fn popCorrespondingWaiter(
+        self: *Self,
+        sud: setupdata.SetupData,
+    ) !*ClassDriver {
+        const waiter = self.event_waiters.get(sud) orelse return UsbDeviceError.NoCorrespondingSetupTrb;
+        _ = self.event_waiters.remove(sud);
+        return waiter;
     }
 
     /// Delete the TRB pair from the map.

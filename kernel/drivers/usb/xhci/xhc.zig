@@ -35,7 +35,7 @@ const num_device_slots = 8;
 
 /// Buffer used by fixed-size allocator.
 /// TODO: use kernel allocator whin it's ready.
-var general_buf = [_]u8{0} ** (4096 * 10);
+var general_buf = [_]u8{0} ** (4096 * 20);
 /// TODO: use kernel allocator whin it's ready.
 var fsa = std.heap.FixedBufferAllocator.init(&general_buf);
 

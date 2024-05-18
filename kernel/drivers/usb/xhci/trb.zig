@@ -276,6 +276,41 @@ pub const ConfigureEndpointCommandTrb = packed struct(u128) {
     slot_id: u8 = 0,
 };
 
+pub const NormalTrb = packed struct(u128) {
+    /// Data Buffer Pointer.
+    data_buf_ptr: u64,
+
+    /// TRB Transfer Length.
+    trb_transfer_length: u17,
+    /// TD Size.
+    td_size: u5 = 0,
+    /// Interrupter Target.
+    interrupter_target: u10,
+
+    /// Cycle bit.
+    cycle_bit: u1 = 1,
+    /// Evaluate Next TRB.
+    ent: bool = false,
+    /// Interrupter on Short Packet.
+    isp: bool = false,
+    /// No Snoop.
+    ns: bool = false,
+    /// Chain Bit.
+    ch: bool = false,
+    /// Interrupt On Completion.
+    ioc: bool = false,
+    /// Immediate Data.
+    idt: bool = false,
+    /// Reserved.
+    _reserved3: u2 = 0,
+    /// Block Event Interrupt.
+    bei: bool = false,
+    /// TRB Type.
+    trb_type: TrbType = .Normal,
+    /// Reserved.
+    _reserved4: u16 = 0,
+};
+
 /// Type ID of TRB.
 pub const TrbType = enum(u6) {
     Reserved = 0,

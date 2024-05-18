@@ -20,6 +20,7 @@ pub const MouseDriver = struct {
             .ptr = mouse,
             .device = dev,
             .if_index = if_index,
+            .in_packed_size = 3,
             .vtable = &.{},
         };
     }

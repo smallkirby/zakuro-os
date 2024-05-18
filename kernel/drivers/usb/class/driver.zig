@@ -11,6 +11,8 @@ const log = std.log.scoped(.uclass);
 pub const ClassDriverError = error{
     /// Failed to allocater memory.
     AllocationFailed,
+    /// Invalid phase
+    InvalidPhase,
 };
 
 pub const ClassDriver = @This();
@@ -27,6 +29,15 @@ device: *UsbDevice,
 ep_intr_in: EndpoinInfo = undefined,
 /// Endpoint ID of the OUT direction.
 ep_intr_out: EndpoinInfo = undefined,
+/// TODO: doc
+in_packed_size: u32,
+
+/// Initialization phase
+phase: Phase = .NotInitialized,
+/// General purpose buffer for this driver.
+/// Any alignment is allowed.
+buffer: [buffer_size]u8 = [_]u8{0} ** buffer_size,
+const buffer_size = 1024;
 
 pub const VTable = struct {};
 
@@ -53,5 +64,23 @@ pub fn onEndpointConfigured(self: *Self) !void {
         .w_length = 0,
     };
 
+    self.phase = .Phase1;
     try self.device.controlOut(default_control_pipe_id, sud, null, self);
 }
+
+/// TODO: doc
+pub fn onControlComplete(self: *Self) !void {
+    if (self.phase != .Phase1) {
+        return ClassDriverError.InvalidPhase;
+    }
+
+    self.phase = .Phase2;
+    try self.device.interruptIn(self.ep_intr_in.ep_id, self.buffer[0..self.in_packed_size]);
+}
+
+const Phase = enum {
+    NotInitialized,
+    Phase1,
+    Phase2,
+    Phase3,
+};
