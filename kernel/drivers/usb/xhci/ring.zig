@@ -54,7 +54,7 @@ pub const Ring = struct {
                 .tc = true,
             };
             self.copyToTail(@ptrCast(&link));
-            self.pcs +|= 1;
+            self.pcs +%= 1;
             self.index = 0;
         }
 
