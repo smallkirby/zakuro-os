@@ -111,7 +111,6 @@ export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) n
 
     // Find available devices
     const max_ports = xhc.capability_regs.hcs_params1.read().maxports;
-    log.debug("Max port number: {d}", .{max_ports});
     for (1..max_ports) |i| {
         const port = xhc.getPortAt(i);
         if (port.isConnected()) {
@@ -119,7 +118,7 @@ export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) n
                 log.err("Failed to reset port {d}: {?}", .{ i, err });
                 continue;
             };
-            log.info("Reset completed for port {d}.", .{i});
+            log.info("Reset of port {d} completed.", .{i});
         }
     }
 

@@ -283,7 +283,7 @@ pub const Controller = struct {
 
     /// Assign an address to the device.
     fn addressDevice(self: *Self, port_id: usize, slot_id: usize) XhcError!void {
-        log.debug("Addressing the device: port_id={d}, slot_id={d}", .{ port_id, slot_id });
+        log.debug("Port {d:0>2}, Slot {d:0>2}: Addressing the device", .{ port_id, slot_id });
 
         // Allocate a device in the slot.
         self.dev_controller.allocateDevice(
@@ -346,7 +346,6 @@ pub const Controller = struct {
         };
         _ = self.cmd_ring.push(@ptrCast(&adc_trb));
         self.notify_doorbell(0);
-        log.debug("Notified the xHC to address the device.", .{});
     }
 
     /// Initialize the USB device at the specified port and slot.
@@ -411,6 +410,8 @@ pub const Controller = struct {
         };
         _ = self.cmd_ring.push(@ptrCast(&cec_trb));
         self.notify_doorbell(0);
+
+        log.debug("Port {d:0>2}: Requested to configure the endpoint.", .{port_id});
     }
 
     /// Complete the configuration of endpoints.
@@ -455,7 +456,7 @@ pub const Controller = struct {
         const cmd_trb: *Trb = @ptrFromInt(trb.command_trb_pointer);
         const issuer_type = cmd_trb.trb_type;
         const slot_id = trb.slot_id;
-        log.debug("Command Completion Event: slot_id={d}, issuer_type={?}", .{ slot_id, issuer_type });
+        log.debug("Slot {d:0>2}: Command Completion Event: issuer={s}", .{ slot_id, @tagName(issuer_type) });
 
         switch (issuer_type) {
             .EnableSlotCommand => {
@@ -510,7 +511,10 @@ pub const Controller = struct {
     ) XhcError!void {
         const port_id = trb.port_id;
         const target_port = self.getPortAt(port_id);
-        log.debug("Port Status Change Event: port_id={d}, status={?}", .{ port_id, self.port_states[port_id] });
+        log.debug(
+            "Port {d:0>2}: Port Status Change Event: status={s}",
+            .{ port_id, @tagName(self.port_states[port_id]) },
+        );
 
         try switch (self.port_states[port_id]) {
             .Disconnected => self.resetPort(target_port),
@@ -532,7 +536,6 @@ pub const Controller = struct {
         if (!enabled or !reset_changed) {
             return;
         }
-        log.debug("Enabling the port: {d}", .{prt.port_index});
 
         // Clear status change bit
         prt.prs.portsc.modify(.{
@@ -544,6 +547,8 @@ pub const Controller = struct {
         var esc_trb = trbs.EnableSlotCommandTrb{};
         _ = self.cmd_ring.push(@ptrCast(&esc_trb));
         self.notify_doorbell(0);
+
+        log.debug("Port {d:0>2}: Requested to enable the slot.", .{prt.port_index});
     }
 
     /// Reset the port.
@@ -568,6 +573,7 @@ pub const Controller = struct {
                 self.port_under_reset = prt.port_index;
                 self.port_states[prt.port_index] = .Resetting;
                 prt.reset();
+                log.debug("Port {d:0>2}: Requested to reset the port.", .{prt.port_index});
             },
             else => return XhcError.InvalidState,
         }
