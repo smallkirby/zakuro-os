@@ -524,7 +524,7 @@ const DescReader = struct {
     /// Note that the first descriptor is never returned.
     pub fn next(self: *DescReader) ?[*]u8 {
         self.p += self.p[0];
-        if (@intFromPtr(self.p) > @intFromPtr(self.buf.ptr) + self.buf.len) {
+        if (@intFromPtr(self.p) >= @intFromPtr(self.buf.ptr) + self.buf.len) {
             return null;
         } else {
             return self.p[0..];
