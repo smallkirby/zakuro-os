@@ -1,8 +1,8 @@
 //! This module provides a graphic console.
 
-const graphics = @import("graphics.zig");
-const PixelWriter = graphics.PixelWriter;
-const PixelColor = graphics.PixelColor;
+const gfx = @import("gfx.zig");
+const PixelWriter = gfx.PixelWriter;
+const PixelColor = gfx.PixelColor;
 const std = @import("std");
 const log = std.log.scoped(.console);
 const format = std.fmt.format;

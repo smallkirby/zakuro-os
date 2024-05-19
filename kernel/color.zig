@@ -1,6 +1,6 @@
 //! This module defines a set of colors.
 
-const Color = @import("graphics.zig").PixelColor;
+const Color = @import("gfx.zig").PixelColor;
 
 fn c(red: u8, green: u8, blue: u8) Color {
     return .{ .red = red, .green = green, .blue = blue };
