@@ -135,6 +135,28 @@ pub fn build(b: *std.Build) void {
         run_step.dependOn(&run_qemu_cmd.step);
     }
 
+    // Build test asset
+    var dwarf_example_out: []const u8 = undefined;
+    var dwarf_exe: *std.Build.Step.Compile = undefined;
+    {
+        dwarf_exe = b.addExecutable(.{
+            .name = "dwarf-test",
+            .root_source_file = b.path("tests/dwarf/main.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        const run = b.addRunArtifact(dwarf_exe);
+        run.step.dependOn(&dwarf_exe.step);
+
+        b.installArtifact(dwarf_exe);
+
+        dwarf_example_out = b.pathJoin(&[_][]const u8{
+            "zig-out",
+            "bin",
+            dwarf_exe.out_filename,
+        });
+    }
+
     // Declare a test step.
     {
         const root_unit_tests = b.addTest(.{
@@ -158,5 +180,16 @@ pub fn build(b: *std.Build) void {
         const test_step = b.step("test", "Run unit tests");
         test_step.dependOn(&run_exe_unit_tests.step);
         test_step.dependOn(&run_zakuro_unit_tests.step);
+
+        // Add a embed files
+        {
+            root_unit_tests.root_module.addAnonymousImport("dwarf-elf", .{
+                .root_source_file = b.path(dwarf_example_out),
+            });
+            zakuro_unit_tests.root_module.addAnonymousImport("dwarf-elf", .{
+                .root_source_file = b.path(dwarf_example_out),
+            });
+            test_step.dependOn(&dwarf_exe.step);
+        }
     }
 }

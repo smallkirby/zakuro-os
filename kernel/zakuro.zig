@@ -12,6 +12,8 @@ pub const drivers = @import("drivers.zig");
 pub const mmio = @import("mmio.zig");
 pub const mouse = @import("mouse.zig");
 
+pub const dwarf = @import("dwarf/dwarf.zig");
+
 /// 2D vector.
 pub fn Vector(comptime T: type) type {
     return struct {
