@@ -45,13 +45,13 @@ pub const PixelWriter = struct {
     }
 
     /// Write an ASCII character to the specified position.
-    pub fn writeAscii(self: Self, x: u32, y: u32, c: u8, color: PixelColor) void {
+    pub fn writeAscii(self: Self, x: i32, y: i32, c: u8, color: PixelColor) void {
         const fonts = font.getFont(c).?;
         for (0..font.FONT_HEIGHT) |dy| {
             for (0..font.FONT_WIDTH) |dx| {
                 if ((fonts[dy] << @truncate(dx)) & 0x80 != 0) {
-                    const px = @as(u32, @truncate(dx)) + x;
-                    const py = @as(u32, @truncate(dy)) + y;
+                    const px = usize2i32(dx) + x;
+                    const py = usize2i32(dy) + y;
                     self.writePixel(px, py, color);
                 }
             }
@@ -59,31 +59,41 @@ pub const PixelWriter = struct {
     }
 
     /// Write a string to the specified position until null character.
-    pub fn writeString(self: Self, x: u32, y: u32, s: []const u8, color: PixelColor) void {
+    pub fn writeString(self: Self, x: i32, y: i32, s: []const u8, color: PixelColor) void {
         var px = x;
         var py = y;
         for (s) |c| {
             if (c == 0) break;
             if (c == '\n') {
                 px = x;
-                py += @truncate(font.FONT_HEIGHT);
+                py += @intCast(font.FONT_HEIGHT);
             } else {
                 self.writeAscii(px, py, c, color);
-                px += @truncate(font.FONT_WIDTH);
+                px += @intCast(font.FONT_WIDTH);
             }
         }
     }
 
     /// Write a pixel color to the specified position.
-    pub fn writePixel(self: Self, x: u32, y: u32, color: PixelColor) void {
-        return self.write_pixel_func(self, x, y, color);
+    pub fn writePixel(self: Self, x: i32, y: i32, color: PixelColor) void {
+        if (x < 0 or x >= @as(i32, @intCast(self.config.horizontal_resolution)) or
+            y < 0 or y >= @as(i32, @intCast(self.config.vertical_resolution)))
+        {
+            return;
+        }
+        return self.write_pixel_func(
+            self,
+            @bitCast(x),
+            @bitCast(y),
+            color,
+        );
     }
 
     /// Draw a rectangle with the specified position, size, and color.
     /// The only edge of the rectangle is drawn.
     pub fn drawRectangle(
         self: Self,
-        pos: Vector(u32),
+        pos: Vector(i32),
         size: Vector(u32),
         color: PixelColor,
     ) void {
@@ -95,15 +105,15 @@ pub const PixelWriter = struct {
     /// Fill a rectangle with the specified position, size, and color.
     pub fn fillRectangle(
         self: Self,
-        pos: Vector(u32),
+        pos: Vector(i32),
         size: Vector(u32),
         color: PixelColor,
     ) void {
         for (0..size.y) |dy| {
             for (0..size.x) |dx| {
                 self.writePixel(
-                    pos.x + @as(u32, @truncate(dx)),
-                    pos.y + @as(u32, @truncate(dy)),
+                    pos.x + usize2i32(dx),
+                    pos.y + usize2i32(dy),
                     color,
                 );
             }
@@ -133,3 +143,7 @@ pub const PixelWriter = struct {
         return @ptrCast(&config.frame_buffer[rel_pos *| 4]);
     }
 };
+
+pub fn usize2i32(n: usize) i32 {
+    return @bitCast(@as(u32, @truncate(n)));
+}

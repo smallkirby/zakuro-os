@@ -56,7 +56,7 @@ pub const Console = struct {
             if (c == '\n') {
                 self.newline();
             } else {
-                self.writer.writeAscii(8 * self.cur_col, 16 * self.cur_row, c, self.fgc);
+                self.writer.writeAscii(@bitCast(8 * self.cur_col), @bitCast(16 * self.cur_row), c, self.fgc);
                 self.buffer[self.cur_row][self.cur_col] = c;
                 self.cur_col += 1;
             }
@@ -79,13 +79,17 @@ pub const Console = struct {
             // Clean the console.
             for (0..16 * kRows) |y| {
                 for (0..8 * kCols) |x| {
-                    self.writer.writePixel(@truncate(x), @truncate(y), self.bgc);
+                    self.writer.writePixel(
+                        @intCast(x),
+                        @intCast(y),
+                        self.bgc,
+                    );
                 }
             }
             // Scroll up.
             for (0..kRows - 1) |row| {
                 @memcpy(&self.buffer[row], &self.buffer[row + 1]);
-                self.writer.writeString(0, @truncate(16 * row), &self.buffer[row], self.fgc);
+                self.writer.writeString(0, @intCast(16 * row), &self.buffer[row], self.fgc);
             }
         }
     }

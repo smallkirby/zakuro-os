@@ -31,12 +31,16 @@ export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) n
     // Clear the screen
     for (0..fb_config.horizontal_resolution) |x| {
         for (0..fb_config.vertical_resolution) |y| {
-            pixel_writer.writePixel(@truncate(x), @truncate(y), color.LightPurple);
+            pixel_writer.writePixel(
+                @bitCast(@as(u32, @truncate(x))),
+                @bitCast(@as(u32, @truncate(y))),
+                color.LightPurple,
+            );
         }
     }
     // Draw a dock
     pixel_writer.fillRectangle(
-        .{ .x = fb_config.horizontal_resolution - 0x30, .y = 0 },
+        .{ .x = @intCast(fb_config.horizontal_resolution - 0x30), .y = 0 },
         .{ .x = 0x30, .y = fb_config.vertical_resolution },
         color.DarkPurple,
     );
@@ -45,8 +49,8 @@ export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) n
         for (0..3) |y| {
             pixel_writer.fillRectangle(
                 .{
-                    .x = fb_config.horizontal_resolution - 0x20 + @as(u32, @truncate(x * 6)),
-                    .y = fb_config.vertical_resolution - 0x20 + @as(u32, @truncate(y * 6)),
+                    .x = @as(i32, @intCast(fb_config.horizontal_resolution)) - 0x20 + @as(i32, @intCast(x * 6)),
+                    .y = @as(i32, @intCast(fb_config.vertical_resolution)) - 0x20 + @as(i32, @intCast(y * 6)),
                 },
                 .{ .x = 3, .y = 3 },
                 color.White,
@@ -59,9 +63,10 @@ export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) n
     }
 
     var cursor = mouse.MouseCursor{
-        .ecolor = color.White,
+        .ecolor = color.LightPurple,
         .pos = .{ .x = 100, .y = 100 },
         .writer = &pixel_writer,
+        .screen_size = .{ .x = fb_config.horizontal_resolution, .y = fb_config.vertical_resolution },
     };
     cursor.drawMouse();
 

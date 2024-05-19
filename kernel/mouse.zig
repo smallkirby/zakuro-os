@@ -1,6 +1,7 @@
 //! This file provides a mouse graphics.
 
 const std = @import("std");
+const log = std.log.scoped(.mouse);
 const zakuro = @import("zakuro");
 const gfx = zakuro.graphics;
 const Vector = zakuro.Vector;
@@ -44,6 +45,8 @@ pub const MouseCursor = struct {
     pos: Vector(i32),
     /// Color used to erase the mouse cursor.
     ecolor: gfx.PixelColor,
+    /// Maximum screen size.
+    screen_size: Vector(u32),
 
     const Self = @This();
 
@@ -70,15 +73,15 @@ pub const MouseCursor = struct {
                 switch (mouse_shape[y][x]) {
                     '@' => {
                         self.writer.writePixel(
-                            @as(u32, @bitCast(pos.x)) + @as(u32, @truncate(x)),
-                            @as(u32, @bitCast(pos.y)) + @as(u32, @truncate(y)),
+                            pos.x + @as(i32, @bitCast(@as(u32, @truncate(x)))),
+                            pos.y + @as(i32, @bitCast(@as(u32, @truncate(y)))),
                             colors.Black,
                         );
                     },
                     '.' => {
                         self.writer.writePixel(
-                            @as(u32, @bitCast(pos.x)) + @as(u32, @truncate(x)),
-                            @as(u32, @bitCast(pos.y)) + @as(u32, @truncate(y)),
+                            pos.x + @as(i32, @bitCast(@as(u32, @truncate(x)))),
+                            pos.y + @as(i32, @bitCast(@as(u32, @truncate(y)))),
                             colors.White,
                         );
                     },
@@ -89,11 +92,16 @@ pub const MouseCursor = struct {
     }
 
     /// Move the mouse cursor relative to the current position.
-    pub fn moveRel(self: *Self, delta: Vector(i32)) void {
+    pub fn moveRel(self: *Self, delta: Vector(i8)) void {
         self.eraseMouse();
-        self.pos.x +|= delta.x;
-        self.pos.y +|= delta.y;
+        self.pos.x +|= @intCast(delta.x);
+        self.pos.y +|= @intCast(delta.y);
         self.drawMouse();
+    }
+
+    fn adjustPos(self: *Self) void {
+        self.pos.x = @max(0, @min(self.pos.x, self.screen_size));
+        self.pos.y = @max(0, @min(self.pos.y, self.screen_size));
     }
 
     /// Erase mouse cursor by overwriting with the background color.
@@ -102,8 +110,8 @@ pub const MouseCursor = struct {
             for (0..mouse_cursor_width) |x| {
                 if (mouse_shape[y][x] != ' ')
                     self.writer.writePixel(
-                        @as(u32, @bitCast(self.pos.x)) +| @as(u32, @truncate(x)),
-                        @as(u32, @bitCast(self.pos.y)) +| @as(u32, @truncate(y)),
+                        self.pos.x +| gfx.usize2i32(x),
+                        self.pos.y +| gfx.usize2i32(y),
                         self.ecolor,
                     );
             }
