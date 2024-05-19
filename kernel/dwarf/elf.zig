@@ -7,43 +7,81 @@ const Allocator = std.mem.Allocator;
 pub const ElfError = error{
     /// Invalid ELF header
     InvalidHeader,
+    /// Some section is not found
+    SectionNotFound,
 };
 
 /// ELF file format
 pub const Elf = struct {
     /// debug_info section
-    debug_info: []u8,
+    debug_info: []const u8,
     /// debug_loc section
-    debug_loc: []u8,
+    debug_loc: []const u8,
     /// debug_abbrev section
-    debug_abbrev: []u8,
+    debug_abbrev: []const u8,
     /// debug_aranges section
-    debug_ranges: []u8,
+    debug_ranges: []const u8,
     /// debug_str section
-    debug_str: []u8,
+    debug_str: []const u8,
     /// debug_line section
-    debug_line: []u8,
+    debug_line: []const u8,
     // ELF header
     header: ElfHeader,
+
+    /// ELF binary
+    bin: [*]const u8,
 
     /// Memory allocator used internally
     allocator: Allocator,
 
     const Self = @This();
 
-    pub fn new(bin: [*]const u8, allocator: Allocator) Self {
-        _ = bin; // autofix
-
-        return Self{
+    pub fn new(bin: [*]const u8, allocator: Allocator) ElfError!Self {
+        const header = try ElfHeader.new(bin);
+        var self = Self{
             .debug_info = undefined,
             .debug_loc = undefined,
             .debug_abbrev = undefined,
             .debug_ranges = undefined,
             .debug_str = undefined,
             .debug_line = undefined,
-            .header = undefined,
+            .header = header,
             .allocator = allocator,
+            .bin = bin,
         };
+
+        const err = ElfError.SectionNotFound;
+        const debug_info = self.sectionHeader(".debug_info") orelse return err;
+        const debug_loc = self.sectionHeader(".debug_loc") orelse return err;
+        const debug_abbrev = self.sectionHeader(".debug_abbrev") orelse return err;
+        const debug_ranges = self.sectionHeader(".debug_ranges") orelse return err;
+        const debug_str = self.sectionHeader(".debug_str") orelse return err;
+        const debug_line = self.sectionHeader(".debug_line") orelse return err;
+
+        self.debug_info = (bin + debug_info.offset)[0..debug_info.size];
+        self.debug_loc = (bin + debug_loc.offset)[0..debug_loc.size];
+        self.debug_abbrev = (bin + debug_abbrev.offset)[0..debug_abbrev.size];
+        self.debug_ranges = (bin + debug_ranges.offset)[0..debug_ranges.size];
+        self.debug_str = (bin + debug_str.offset)[0..debug_str.size];
+        self.debug_line = (bin + debug_line.offset)[0..debug_line.size];
+
+        return self;
+    }
+
+    /// Get the section header of the given name.
+    fn sectionHeader(self: *const Self, name: []const u8) ?SectionHeader {
+        const header = self.header;
+        const shstrtab = header.shstrtab;
+
+        for (0..header.fheader.shnum) |i| {
+            const sh: *const SectionHeader = @alignCast(@ptrCast(self.bin + header.fheader.shoff + i * header.fheader.shentsize));
+            const sh_name = shstrtab.strtabAt(sh.name) orelse continue;
+            if (std.mem.eql(u8, sh_name, name)) {
+                return sh.*;
+            }
+        }
+
+        return null;
     }
 };
 
@@ -166,19 +204,9 @@ const Shstrtab = struct {
 
     /// Get a string at the given offset.
     pub fn strtabAt(self: *const Self, offset: u64) ?[]const u8 {
-        var ent_start: ?usize = if (offset == 0) 0 else null;
-        var cur: u64 = 0;
-
-        for (self.table, 0..) |c, i| {
+        for (self.table[offset..], 0..) |c, i| {
             if (c == 0) {
-                if (ent_start) |start| {
-                    return self.table[start..i];
-                }
-
-                cur += 1;
-                if (cur == offset) {
-                    ent_start = i + 1;
-                }
+                return self.table[offset .. offset + i];
             }
         }
 
@@ -215,7 +243,7 @@ test {
 const testing = std.testing;
 
 test "Can parse ELF header and shstrtab" {
-    const bin align(64) = @embedFile("dwarf-elf").*;
+    const bin align(0x100) = @embedFile("dwarf-elf").*;
 
     try testing.expectEqual(@offsetOf(ElfHeader.FixedHeader, "shoff"), 0x28);
     try testing.expectEqual(@offsetOf(ElfHeader.FixedHeader, "flags"), 0x30);
@@ -226,7 +254,9 @@ test "Can parse ELF header and shstrtab" {
 
     try testing.expect(std.mem.eql(u8, "", header.shstrtab.strtabAt(0).?));
     try testing.expect(std.mem.eql(u8, ".rodata", header.shstrtab.strtabAt(1).?));
-    try testing.expect(std.mem.eql(u8, ".text", header.shstrtab.strtabAt(4).?));
-    try testing.expect(std.mem.eql(u8, ".debug_info", header.shstrtab.strtabAt(11).?));
-    try testing.expect(std.mem.eql(u8, ".strtab", header.shstrtab.strtabAt(20).?));
+}
+
+test "Can parse necessary sections and init ERF struct" {
+    const bin align(0x100) = @embedFile("dwarf-elf").*;
+    _ = try Elf.new(&bin, std.heap.page_allocator);
 }
