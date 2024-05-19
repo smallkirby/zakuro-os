@@ -138,6 +138,7 @@ pub fn build(b: *std.Build) void {
     // Build test asset
     var dwarf_example_out: []const u8 = undefined;
     var dwarf_exe: *std.Build.Step.Compile = undefined;
+    var dwarf_install: *std.Build.Step.InstallArtifact = undefined;
     {
         dwarf_exe = b.addExecutable(.{
             .name = "dwarf-test",
@@ -145,10 +146,9 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
         });
-        const run = b.addRunArtifact(dwarf_exe);
-        run.step.dependOn(&dwarf_exe.step);
 
         b.installArtifact(dwarf_exe);
+        dwarf_install = b.addInstallArtifact(dwarf_exe, .{});
 
         dwarf_example_out = b.pathJoin(&[_][]const u8{
             "zig-out",
@@ -189,7 +189,8 @@ pub fn build(b: *std.Build) void {
             zakuro_unit_tests.root_module.addAnonymousImport("dwarf-elf", .{
                 .root_source_file = b.path(dwarf_example_out),
             });
-            test_step.dependOn(&dwarf_exe.step);
+            root_unit_tests.step.dependOn(&dwarf_install.step);
+            zakuro_unit_tests.step.dependOn(&dwarf_exe.step);
         }
     }
 }
