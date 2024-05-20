@@ -211,7 +211,7 @@ pub const AttributeName = enum(u64) {
     }
 };
 
-/// Attribute encoding for a DWARF abbreviation declaration.
+/// Attribute encoding format for a DWARF abbreviation declaration.
 pub const AttributeForm = enum(u64) {
     Reserved = 0x00,
     Addr = 0x01,

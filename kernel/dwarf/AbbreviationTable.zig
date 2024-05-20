@@ -8,7 +8,6 @@ const leb = std.leb;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 
-const dwarf = @import("elf.zig");
 const Elf = @import("elf.zig").Elf;
 const encoding = @import("encoding.zig");
 const TagEncoding = encoding.TagEncoding;
@@ -17,12 +16,15 @@ const AttributeName = encoding.AttributeName;
 const AttributeForm = encoding.AttributeForm;
 
 const Self = @This();
+const AbbreviationTable = Self;
 
 /// List of abbreviation declaration in this table.
 /// Be aware that the code can differ from the index inside this slice.
 decls: []Declaration,
+/// Offset from the start of .debug_abbrev secion.
+offset: usize,
 
-/// Parse ELF's debug_abbrev section and constructs Abbreviation Tables.
+/// Parse ELF's .debug_abbrev section and constructs Abbreviation Tables.
 pub fn parse(elf: Elf, allocator: Allocator) ![]Self {
     const abbrev = elf.debug_abbrev;
     var stream = std.io.fixedBufferStream(abbrev);
@@ -34,6 +36,8 @@ pub fn parse(elf: Elf, allocator: Allocator) ![]Self {
 
     // Parse all tables.
     while (crdr.bytes_read != abbrev.len) {
+        const tbl_offset = crdr.bytes_read;
+
         var decls = ArrayList(Declaration).init(allocator);
         errdefer decls.deinit();
 
@@ -57,21 +61,43 @@ pub fn parse(elf: Elf, allocator: Allocator) ![]Self {
             while (true) {
                 const name = try leb.readULEB128(u64, rdr);
                 const form = try leb.readULEB128(u64, rdr);
+                if (name == 0 and form == 0) break;
+
                 try attributes.append(.{
                     .name = AttributeName.from(name),
                     .form = @enumFromInt(form),
                 });
-                if (name == 0 and form == 0) break;
             }
 
             decl.attributes = try attributes.toOwnedSlice();
             try decls.append(decl);
         }
 
-        try tables.append(.{ .decls = try decls.toOwnedSlice() });
+        try tables.append(.{
+            .decls = try decls.toOwnedSlice(),
+            .offset = tbl_offset,
+        });
     }
 
     return tables.toOwnedSlice();
+}
+
+/// Find an abbreviation decl specified by the code.
+pub fn findDecl(self: *const Self, code: u64) ?Declaration {
+    for (self.decls) |decl| {
+        if (decl.code == code) return decl;
+    }
+
+    return null;
+}
+
+/// Find an abbreviation table specified by the offset.
+pub fn findTbl(tbls: []Self, offset: usize) ?Self {
+    for (tbls) |tbl| {
+        if (tbl.offset == offset) return tbl;
+    }
+
+    return null;
 }
 
 /// Single declaration in an abbreviation table.
@@ -82,11 +108,11 @@ const Declaration = struct {
     tag: TagEncoding,
     /// Whether this decl has children.
     has_children: ChildDetermination,
-    /// Attributes.
+    /// Attributes, excluding terminal NULL attribute.
     attributes: []Attribute,
 };
 
-const Attribute = struct {
+pub const Attribute = struct {
     name: AttributeName,
     form: AttributeForm,
 };
@@ -106,5 +132,5 @@ test "Parse abbreviation table" {
     try testing.expectEqual(inlined_sub.code, 33);
     try testing.expectEqual(inlined_sub.has_children, .NoChildren);
     try testing.expectEqual(inlined_sub.tag, .InlinedSubroutine);
-    try testing.expectEqual(inlined_sub.attributes.len, 7);
+    try testing.expectEqual(inlined_sub.attributes.len, 6);
 }

@@ -83,6 +83,17 @@ pub const Elf = struct {
 
         return null;
     }
+
+    /// Get the debug string from .debug_str section.
+    pub fn debugStr(self: Self, offset: u64) ?[]const u8 {
+        for (self.debug_str[offset..], 0..) |c, i| {
+            if (c == 0) {
+                return self.debug_str[offset .. offset + i];
+            }
+        }
+
+        return null;
+    }
 };
 
 /// ELF header.
