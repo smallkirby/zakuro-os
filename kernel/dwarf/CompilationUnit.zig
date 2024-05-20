@@ -58,9 +58,23 @@ const Attribute = AbbrevTable.Attribute;
 const Self = @This();
 const CompilationUnit = Self;
 
+/// Header of this compilation unit
+header: CompilationUnitHeader,
+/// All DIEs this compilation unit contains.
+/// The tree relationship is determined by `children` field.
+dies: ArrayList(Die),
+/// Children DIE.
+/// The entries are index of DIEs(`dies`).
+children: ArrayList(DieIndex),
+/// Abbreviation Table this compilation unit uses.
+tbl: AbbrevTable,
+/// Memory allocator.
+allocator: Allocator,
+
 /// Parse ELF's .debug_info section and constructs DIE trees.
-pub fn parse(elf: Elf, abbr_tables: []AbbrevTable, allocator: Allocator) !void {
-    _ = allocator;
+pub fn parse(elf: Elf, abbr_tables: []AbbrevTable, allocator: Allocator) ![]Self {
+    var cus = ArrayList(Self).init(allocator);
+    errdefer cus.deinit();
 
     const info = elf.debug_info;
     var stream = std.io.fixedBufferStream(info);
@@ -89,60 +103,89 @@ pub fn parse(elf: Elf, abbr_tables: []AbbrevTable, allocator: Allocator) !void {
             @panic("Unsupported address size.");
         }
 
-        // Parse all compilation units.
         const tbl = AbbrevTable.findTbl(abbr_tables, abbrev_offset) orelse @panic("Abbrev table not found.");
+        var cu = Self{
+            .header = unit,
+            .dies = ArrayList(Die).init(allocator),
+            .children = ArrayList(DieIndex).init(allocator),
+            .tbl = tbl,
+            .allocator = allocator,
+        };
+
+        // Parse all compilation units.
         const len = length_short + @sizeOf(@TypeOf(length_short)); // NOTE: DWARF bit specific
-        try parseDie(
-            false,
-            unit,
+        try cu.parseDie(
+            null,
             elf,
             (crdr.bytes_read - 11) + len,
-            tbl,
             crdr,
             rdr,
         );
+
+        try cus.append(cu);
     }
+
+    return cus.toOwnedSlice();
 }
 
 /// Parse a DIE and all its children recursively for the current compilation unit.
 fn parseDie(
-    /// Whether this DIE has a parent DIE.
-    parent: bool,
-    /// Root compilation unit header.
-    unit: CompilationUnitHeader,
+    self: *Self,
+    /// Index of the parent DIE in the compilation unit.
+    parent: ?DieIndex,
     /// ELF binary
     elf: Elf,
     /// The offset of the end of this compilation unit starting from the start of .debug_info.
     until: usize,
-    /// Abbreviation tables parsed from .debug_abbrev
-    tbl: AbbrevTable,
     /// Counting reader
     crdr: anytype,
     /// Reader
     rdr: anytype,
 ) !void {
+    const header = self.header;
+    const tbl = self.tbl;
+    const allocator = self.allocator;
+
     while (crdr.bytes_read != until) {
+        const ix = self.dies.items.len;
         const abbrev_code = try leb.readULEB128(u64, rdr);
         if (abbrev_code == 0) {
             // If this DIE is a children, go back to the parent layer.
             // If this DIE does not have a parent, continue parsing siblings.
-            if (parent) return else continue;
+            if (parent) |_| return else continue;
         }
         const decl = tbl.findDecl(abbrev_code) orelse @panic("Abbr decl not found.");
 
         // Parse all attributes in this DIE.
+        var attributes = ArrayList([]const u8).init(allocator);
+        errdefer attributes.deinit();
         for (decl.attributes) |attr| {
-            try readAttribute(unit, attr, rdr, elf);
+            try attributes.append(try readAttribute(
+                header,
+                attr,
+                rdr,
+                elf,
+            ));
         }
 
-        std.debug.print("=====================================\n", .{});
+        const die = Die{
+            .code = abbrev_code,
+            .values = try attributes.toOwnedSlice(),
+            .children = ArrayList(DieIndex).init(allocator),
+        };
+        try self.dies.append(die);
+
+        if (parent) |p| {
+            try self.dies.items[p].children.append(ix);
+        } else {
+            try self.children.append(ix);
+        }
+
         if (decl.has_children == .HasChildren) {
-            try parseDie(
-                true,
-                unit,
+            try self.parseDie(
+                ix,
                 elf,
                 until,
-                tbl,
                 crdr,
                 rdr,
             );
@@ -159,91 +202,93 @@ fn readAttribute(
     rdr: anytype,
     /// ELF binary
     elf: Elf,
-) !void {
+) ![]const u8 {
     _ = unit;
+    const asBytes = std.mem.asBytes;
 
     switch (attr.form) {
         .Addr => {
             const addr = try rdr.readInt(u64, .little);
-            std.debug.print("\taddr: {X}\n", .{addr});
+            return asBytes(&addr);
         },
         .Strp => {
             const offset = try rdr.readInt(u32, .little); // NOTE: DWARF bit specific
             const str = elf.debugStr(offset).?;
-            std.debug.print("\tstrp: {s} (offset=0x{X})\n", .{ str, offset });
+            return str;
         },
         .Data1 => {
             const data = try rdr.readInt(u8, .little);
-            std.debug.print("\tdata2: 0x{X}\n", .{data});
+            return asBytes(&data);
         },
         .Data2 => {
             const data = try rdr.readInt(u16, .little);
-            std.debug.print("\tdata2: 0x{X}\n", .{data});
+            return asBytes(&data);
         },
         .Data4 => {
             const data = try rdr.readInt(u32, .little);
-            std.debug.print("\tdata2: 0x{X}\n", .{data});
+            return asBytes(&data);
         },
         .Data8 => {
             const data = try rdr.readInt(u64, .little);
-            std.debug.print("\tdata2: 0x{X}\n", .{data});
+            return asBytes(&data);
         },
         .SData => {
             const data = try leb.readILEB128(i64, rdr);
-            std.debug.print("\tudata: {X}\n", .{data});
+            return asBytes(&data);
         },
         .UData => {
             const data = try leb.readULEB128(u64, rdr);
-            std.debug.print("\tidata: {X}\n", .{data});
+            return asBytes(&data);
         },
         .SecOffset => {
             _ = try rdr.readInt(u32, .little); // NOTE: DWARF bit specific
+            return &.{};
         },
-        .FlagPresent => {},
+        .FlagPresent => return &.{},
         .Flag => {
             const data = try rdr.readByte() != 0;
-            std.debug.print("\tpresent: {}\n", .{data});
+            return asBytes(&data);
         },
         .Ref1 => {
             const offset = try rdr.readInt(u8, .little);
-            std.debug.print("\toffset: {X}\n", .{offset});
+            return asBytes(&offset);
         },
         .Ref2 => {
             const offset = try rdr.readInt(u16, .little);
-            std.debug.print("\toffset: {X}\n", .{offset});
+            return asBytes(&offset);
         },
         .Ref4 => {
             const offset = try rdr.readInt(u32, .little);
-            std.debug.print("\toffset: {X}\n", .{offset});
+            return asBytes(&offset);
         },
         .Ref8 => {
             const offset = try rdr.readInt(u64, .little);
-            std.debug.print("\toffset: {X}\n", .{offset});
+            return asBytes(&offset);
         },
         .Exprloc => {
             const length = try leb.readULEB128(u64, rdr);
             try rdr.skipBytes(length, .{});
-            std.debug.print("\tlength: {X}\n", .{length});
+            return &.{};
         },
         .Block1 => {
             const length = try rdr.readInt(u8, .little);
             try rdr.skipBytes(length, .{});
-            std.debug.print("\tlength: {X}\n", .{length});
+            return &.{};
         },
         .Block2 => {
             const length = try rdr.readInt(u16, .little);
             try rdr.skipBytes(length, .{});
-            std.debug.print("\tlength: {X}\n", .{length});
+            return &.{};
         },
         .Block4 => {
             const length = try rdr.readInt(u32, .little);
             try rdr.skipBytes(length, .{});
-            std.debug.print("\tlength: {X}\n", .{length});
+            return &.{};
         },
         .Block => {
             const length = try leb.readULEB128(u64, rdr);
             try rdr.skipBytes(length, .{});
-            std.debug.print("\tlength: {X}\n", .{length});
+            return &.{};
         },
         .String,
         .RefAddr,
@@ -254,6 +299,21 @@ fn readAttribute(
         .Reserved => @panic("The DIE's attribute has RESERVED type format."),
     }
 }
+
+const Code = u64;
+const DieIndex = usize;
+
+/// Debug Information Entry
+const Die = struct {
+    /// Code of the abbreviation declaration used by this DIE.
+    code: Code,
+    /// Raw data of the attributes.
+    /// The attribute name and its format can be looked up using the code.
+    values: [][]const u8,
+    /// Children of this DIE.
+    /// This slice contains children DIE's index inside the compilation unit.
+    children: ArrayList(DieIndex),
+};
 
 /// Unit header for DWARF v4 32-bit format.
 const CompilationUnitHeader = packed struct {
@@ -282,5 +342,8 @@ test "Parse compilation units and its DIE children" {
     const elf = try Elf.new(&bin, allocator);
     const abbr_tbls = try AbbrevTable.parse(elf, allocator);
 
-    try parse(elf, abbr_tbls, allocator);
+    const cus = try parse(elf, abbr_tbls, allocator);
+    for (cus) |*cu| {
+        std.debug.print("{d}\n", .{cu.dies.items.len});
+    }
 }
