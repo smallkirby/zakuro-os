@@ -165,6 +165,7 @@ fn parseDie(
                 attr,
                 rdr,
                 elf,
+                self.allocator,
             ));
         }
 
@@ -202,6 +203,8 @@ fn readAttribute(
     rdr: anytype,
     /// ELF binary
     elf: Elf,
+    /// Memory allocator
+    allocator: Allocator,
 ) ![]const u8 {
     _ = unit;
     const asBytes = std.mem.asBytes;
@@ -209,37 +212,21 @@ fn readAttribute(
     switch (attr.form) {
         .Addr => {
             const addr = try rdr.readInt(u64, .little);
-            return asBytes(&addr);
+            const p = try allocator.create(u64);
+            p.* = addr;
+            return asBytes(p);
         },
         .Strp => {
             const offset = try rdr.readInt(u32, .little); // NOTE: DWARF bit specific
             const str = elf.debugStr(offset).?;
             return str;
         },
-        .Data1 => {
-            const data = try rdr.readInt(u8, .little);
-            return asBytes(&data);
-        },
-        .Data2 => {
-            const data = try rdr.readInt(u16, .little);
-            return asBytes(&data);
-        },
-        .Data4 => {
-            const data = try rdr.readInt(u32, .little);
-            return asBytes(&data);
-        },
-        .Data8 => {
-            const data = try rdr.readInt(u64, .little);
-            return asBytes(&data);
-        },
-        .SData => {
-            const data = try leb.readILEB128(i64, rdr);
-            return asBytes(&data);
-        },
-        .UData => {
-            const data = try leb.readULEB128(u64, rdr);
-            return asBytes(&data);
-        },
+        .Data1 => return copyBytesForInt(u8, rdr, allocator),
+        .Data2 => return copyBytesForInt(u16, rdr, allocator),
+        .Data4 => return copyBytesForInt(u32, rdr, allocator),
+        .Data8 => return copyBytesForInt(u64, rdr, allocator),
+        .SData => return copyBytesForLEB(i64, rdr, allocator),
+        .UData => return copyBytesForLEB(u64, rdr, allocator),
         .SecOffset => {
             _ = try rdr.readInt(u32, .little); // NOTE: DWARF bit specific
             return &.{};
@@ -249,22 +236,10 @@ fn readAttribute(
             const data = try rdr.readByte() != 0;
             return asBytes(&data);
         },
-        .Ref1 => {
-            const offset = try rdr.readInt(u8, .little);
-            return asBytes(&offset);
-        },
-        .Ref2 => {
-            const offset = try rdr.readInt(u16, .little);
-            return asBytes(&offset);
-        },
-        .Ref4 => {
-            const offset = try rdr.readInt(u32, .little);
-            return asBytes(&offset);
-        },
-        .Ref8 => {
-            const offset = try rdr.readInt(u64, .little);
-            return asBytes(&offset);
-        },
+        .Ref1 => return copyBytesForInt(u8, rdr, allocator),
+        .Ref2 => return copyBytesForInt(u16, rdr, allocator),
+        .Ref4 => return copyBytesForInt(u32, rdr, allocator),
+        .Ref8 => return copyBytesForInt(u64, rdr, allocator),
         .Exprloc => {
             const length = try leb.readULEB128(u64, rdr);
             try rdr.skipBytes(length, .{});
@@ -300,8 +275,15 @@ fn readAttribute(
     }
 }
 
+pub fn print(self: Self, writer: Writer, allocator: Allocator) !void {
+    for (self.dies.items) |*die| {
+        try die.print(&self.tbl, writer, allocator);
+    }
+}
+
 const Code = u64;
 const DieIndex = usize;
+const Writer = @TypeOf(std.log.debug);
 
 /// Debug Information Entry
 const Die = struct {
@@ -313,6 +295,36 @@ const Die = struct {
     /// Children of this DIE.
     /// This slice contains children DIE's index inside the compilation unit.
     children: ArrayList(DieIndex),
+
+    pub fn print(self: *Die, tbl: *const AbbrevTable, writer: Writer, allocator: Allocator) !void {
+        const decl = tbl.findDecl(self.code) orelse return error.DeclNotFound;
+        writer("Abbrev Number: {d}", .{self.code}); // TODO
+        for (decl.attributes, self.values) |attr, value| {
+            writer("\t{s}: {s}", .{ @tagName(attr.name), try printFormat(attr, value, allocator) });
+        }
+    }
+
+    fn printFormat(attr: Attribute, value: []const u8, allocator: Allocator) ![]const u8 {
+        switch (attr.form) {
+            .Addr => {
+                const v = std.mem.bytesAsValue(u64, value.ptr).*;
+                return std.fmt.allocPrint(allocator, "0x{X}", .{v});
+            },
+            .Strp => return value,
+            .Data1,
+            .Data2,
+            .Data4,
+            .Data8,
+            .SData,
+            .UData,
+            => return std.fmt.allocPrint(allocator, "<0x{any}>", .{value}),
+            .Ref1 => return std.fmt.allocPrint(allocator, "{d}", .{std.mem.bytesAsValue(u8, value.ptr).*}),
+            .Ref2 => return std.fmt.allocPrint(allocator, "{d}", .{std.mem.bytesAsValue(u16, value.ptr).*}),
+            .Ref4 => return std.fmt.allocPrint(allocator, "{d}", .{std.mem.bytesAsValue(u32, value.ptr).*}),
+            .Ref8 => return std.fmt.allocPrint(allocator, "{d}", .{std.mem.bytesAsValue(u64, value.ptr).*}),
+            else => return "???",
+        }
+    }
 };
 
 /// Unit header for DWARF v4 32-bit format.
@@ -334,16 +346,35 @@ const CompilationUnitHeader = packed struct {
     address_size: u8,
 };
 
+fn copyBytesForInt(T: type, rdr: anytype, allocator: Allocator) ![]const u8 {
+    const data = try rdr.readInt(T, .little);
+    const p = try allocator.create(T);
+    p.* = data;
+    return std.mem.asBytes(p);
+}
+
+fn copyBytesForLEB(T: type, rdr: anytype, allocator: Allocator) ![]const u8 {
+    const data = switch (T) {
+        i64 => try leb.readILEB128(T, rdr),
+        u64 => try leb.readULEB128(T, rdr),
+        else => @panic("Unsupported type for copyByteForLEB()"),
+    };
+    const p = try allocator.create(T);
+    p.* = data;
+    return std.mem.asBytes(p);
+}
+
 const testing = std.testing;
 
 test "Parse compilation units and its DIE children" {
     const bin align(0x100) = @embedFile("dwarf-elf").*;
+    // TODO: use testing allocator
     const allocator = std.heap.page_allocator;
     const elf = try Elf.new(&bin, allocator);
     const abbr_tbls = try AbbrevTable.parse(elf, allocator);
 
     const cus = try parse(elf, abbr_tbls, allocator);
-    for (cus) |*cu| {
-        std.debug.print("{d}\n", .{cu.dies.items.len});
-    }
+    try testing.expect(cus.len == 2);
+    try testing.expect(cus[0].dies.items.len > 10000);
+    try testing.expect(cus[1].dies.items.len > 10000);
 }
