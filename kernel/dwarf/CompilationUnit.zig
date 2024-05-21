@@ -370,7 +370,7 @@ test "Parse compilation units and its DIE children" {
     const bin align(0x100) = @embedFile("dwarf-elf").*;
     // TODO: use testing allocator
     const allocator = std.heap.page_allocator;
-    const elf = try Elf.new(&bin, allocator);
+    const elf = try Elf.new(&bin);
     const abbr_tbls = try AbbrevTable.parse(elf, allocator);
 
     const cus = try parse(elf, abbr_tbls, allocator);

@@ -2,7 +2,6 @@
 //! that are needed for DWARF debugging information.
 
 const std = @import("std");
-const Allocator = std.mem.Allocator;
 
 pub const ElfError = error{
     /// Invalid ELF header
@@ -31,12 +30,9 @@ pub const Elf = struct {
     /// ELF binary
     bin: [*]const u8,
 
-    /// Memory allocator used internally
-    allocator: Allocator,
-
     const Self = @This();
 
-    pub fn new(bin: [*]const u8, allocator: Allocator) ElfError!Self {
+    pub fn new(bin: [*]const u8) ElfError!Self {
         const header = try ElfHeader.new(bin);
         var self = Self{
             .debug_info = undefined,
@@ -46,7 +42,6 @@ pub const Elf = struct {
             .debug_str = undefined,
             .debug_line = undefined,
             .header = header,
-            .allocator = allocator,
             .bin = bin,
         };
 
@@ -269,5 +264,5 @@ test "Can parse ELF header and shstrtab" {
 
 test "Can parse necessary sections and init ERF struct" {
     const bin align(0x100) = @embedFile("dwarf-elf").*;
-    _ = try Elf.new(&bin, std.heap.page_allocator);
+    _ = try Elf.new(&bin);
 }

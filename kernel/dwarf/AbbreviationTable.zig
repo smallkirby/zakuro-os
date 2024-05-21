@@ -153,7 +153,7 @@ const testing = std.testing;
 test "Parse abbreviation table" {
     const bin align(0x100) = @embedFile("dwarf-elf").*;
     // TODO: use testing allocator
-    const elf = try Elf.new(&bin, std.heap.page_allocator);
+    const elf = try Elf.new(&bin);
 
     const tables = try parse(elf, std.heap.page_allocator);
     for (tables) |tbl| {
