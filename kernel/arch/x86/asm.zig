@@ -1,6 +1,6 @@
 //! This module provides a set of functions corresponding to x64 asm instructions.
 
-pub fn inb(port: u16) u8 {
+pub inline fn inb(port: u16) u8 {
     return asm volatile (
         \\inb %[port], %[ret]
         : [ret] "={al}" (-> u8),
@@ -8,7 +8,7 @@ pub fn inb(port: u16) u8 {
     );
 }
 
-pub fn inw(port: u16) u8 {
+pub inline fn inw(port: u16) u8 {
     return asm volatile (
         \\inw %[port], %[ret]
         : [ret] "={ax}" (-> u16),
@@ -16,7 +16,7 @@ pub fn inw(port: u16) u8 {
     );
 }
 
-pub fn inl(port: u16) u32 {
+pub inline fn inl(port: u16) u32 {
     return asm volatile (
         \\inl %[port], %[ret]
         : [ret] "={eax}" (-> u32),
@@ -24,7 +24,7 @@ pub fn inl(port: u16) u32 {
     );
 }
 
-pub fn outb(value: u8, port: u16) void {
+pub inline fn outb(value: u8, port: u16) void {
     asm volatile (
         \\outb %[value], %[port]
         :
@@ -33,7 +33,7 @@ pub fn outb(value: u8, port: u16) void {
     );
 }
 
-pub fn outw(value: u16, port: u16) void {
+pub inline fn outw(value: u16, port: u16) void {
     asm volatile (
         \\outw %[value], %[port]
         :
@@ -42,12 +42,20 @@ pub fn outw(value: u16, port: u16) void {
     );
 }
 
-pub fn outl(value: u32, port: u16) void {
+pub inline fn outl(value: u32, port: u16) void {
     asm volatile (
         \\outl %[value], %[port]
         :
         : [value] "{eax}" (value),
           [port] "{dx}" (port),
+    );
+}
+
+pub inline fn lidt(idtr: u64) void {
+    asm volatile (
+        \\lidt (%[idtr])
+        :
+        : [idtr] "r" (idtr),
     );
 }
 

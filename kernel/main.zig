@@ -11,6 +11,8 @@ const color = zakuro.color;
 const pci = zakuro.pci;
 const drivers = zakuro.drivers;
 const mouse = zakuro.mouse;
+const arch = zakuro.arch;
+const intr = zakuro.arch.intr;
 
 /// Override panic impl
 pub const panic = @import("panic.zig").panic_fn;
@@ -23,7 +25,13 @@ pub const std_options = klog.default_log_options;
 export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) noreturn {
     const serial = ser.init();
     klog.init(serial);
+
     log.info("Booting Zakuro OS...", .{});
+    log.info("BSP LAPIC ID: {d}", .{arch.getBspLapicId()});
+
+    // Initialize IDT
+    intr.init();
+    log.info("Initialized IDT.", .{});
 
     const pixel_writer = graphics.PixelWriter.new(fb_config);
     var con = console.Console.new(pixel_writer, color.GBFg, color.GBBg);

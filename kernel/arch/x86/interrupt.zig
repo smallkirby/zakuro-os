@@ -1,4 +1,31 @@
 const std = @import("std");
+const log = std.log.scoped(.intr);
+
+const am = @import("asm.zig");
+
+/// Interrupt Descriptor Table.
+var idt: [256]GateDesriptor = [_]GateDesriptor{std.mem.zeroes(GateDesriptor)} ** 256;
+/// IDT Register.
+var idtr = IdtRegister{
+    .limit = @sizeOf(@TypeOf(idt)) - 1,
+    // TODO: BUG: Zig v0.12.0. https://github.com/ziglang/zig/issues/17856
+    // .base = &idt,
+    // This initialization invokes LLVM error.
+    // As a workaround, we make `idtr` mutable and initialize it in `init()`.
+    .base = undefined,
+};
+
+/// Initialize the IDT.
+pub fn init() void {
+    idtr.base = &idt;
+
+    am.lidt(@intFromPtr(&idtr));
+}
+
+const IdtRegister = packed struct {
+    limit: u16,
+    base: *[256]GateDesriptor,
+};
 
 /// Entry in the Interrupt Descriptor Table.
 pub const GateDesriptor = packed struct(u128) {
@@ -33,6 +60,7 @@ pub const GateDesriptor = packed struct(u128) {
 
 /// Gate type of the gate descriptor in IDT.
 pub const GateType = enum(u4) {
+    Invalid = 0b0000,
     Interrupt64 = 0b1110,
     Trap64 = 0b1111,
 };
@@ -50,4 +78,9 @@ test "gate descriptor" {
     };
 
     try testing.expectEqual(0x0123def0_9abc_1234, gate.offset());
+}
+
+test "IDTR limit" {
+    std.debug.print("limit: {d}\n", .{idtr.limit});
+    try testing.expectEqual(256 * 16 - 1, idtr.limit);
 }
