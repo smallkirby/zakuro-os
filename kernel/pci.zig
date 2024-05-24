@@ -4,6 +4,7 @@ const std = @import("std");
 const zakuro = @import("zakuro");
 const log = std.log.scoped(.pci);
 const arch = zakuro.arch;
+const msi = zakuro.arch.msi;
 
 /// Maximum number of PCI devices that can be registered.
 const max_device_num: usize = 256;
@@ -23,6 +24,10 @@ pub const addr_configuration_data = 0xCFC;
 pub const PciError = error{
     /// Device list is full.
     ListFull,
+    /// MSI is not supported.
+    MsiUncapable,
+    /// Exceed the number of supported vectors.
+    ExceedSupportedVectors,
 };
 
 /// Configration address register.
@@ -150,6 +155,15 @@ pub const PciDevice = struct {
 
     const Self = @This();
 
+    const CapabilityHeader = packed struct(u32) {
+        /// Capability ID.
+        id: u8,
+        /// Pointer to the next capability.
+        next_ptr: u8,
+        /// Capability-specific data.
+        cap: u16,
+    };
+
     /// Get the configuration address of the device.
     pub fn address(self: Self, function: u3, reg: RegisterOffsets) ConfigAddress {
         return ConfigAddress{
@@ -173,6 +187,28 @@ pub const PciDevice = struct {
         return @truncate(val >> (@intFromEnum(reg) % 4 * 8));
     }
 
+    fn readDataArb(self: Self, function: u3, offset: u8) u32 {
+        const addr = ConfigAddress{
+            .offset = offset,
+            .function = function,
+            .device = self.device,
+            .bus = self.bus,
+        };
+        arch.pci.setConfigAddress(addr);
+        return arch.pci.getConfigData();
+    }
+
+    fn writeDataArb(self: Self, function: u3, offset: u8, data: u32) void {
+        const addr = ConfigAddress{
+            .offset = offset,
+            .function = function,
+            .device = self.device,
+            .bus = self.bus,
+        };
+        arch.pci.setConfigAddress(addr);
+        arch.pci.setConfigData(data);
+    }
+
     /// Check if the device is a single-function device.
     pub fn isSingleFunction(self: Self) bool {
         const header_type = self.readData(0, RegisterOffsets.HeaderType);
@@ -187,6 +223,16 @@ pub const PciDevice = struct {
     /// Read a 16-bit Device ID of the device from the configuration space.
     pub fn readDeviceId(self: Self, function: u3) u16 {
         return self.readData(function, RegisterOffsets.DeviceID);
+    }
+
+    /// Read a 8-bit Capabilities Pointer of the device from the configuration space.
+    pub fn readCapPointer(self: Self, function: u3) u8 {
+        return self.readData(function, RegisterOffsets.CapabilitiesPointer);
+    }
+
+    /// Read a Capability Header from the configuration space.
+    pub fn readCapHeader(self: Self, function: u3, offset: u8) CapabilityHeader {
+        return @bitCast(self.readDataArb(function, offset));
     }
 
     /// Read a 32-bit BAR (Base Address Register) of the device from the configuration space.
@@ -264,6 +310,73 @@ pub const DeviceInfo = struct {
     prog_if: u8,
     /// Header type
     header_type: u8,
+
+    const Self = @This();
+
+    /// Enable MSI for the device.
+    /// `num_vectors_exp` is the number of MSI vectors to be enabled.
+    /// When `num_vectors_exp` is N, 2^N MSI vectors are enabled.
+    /// If it ecxeeds the supported number of vectors, it returns an error.
+    pub fn configureMsi(
+        self: *const Self,
+        addr: msi.MessageAddress,
+        data: msi.MessageData,
+        num_vectors_exp: u3,
+    ) PciError!void {
+        var cap_ptr = self.device.readCapPointer(self.function);
+        while (cap_ptr != 0) {
+            const header = self.device.readCapHeader(self.function, cap_ptr);
+
+            if (header.id == 0x5) {
+                return self.configureMsiRegister(
+                    cap_ptr,
+                    addr,
+                    data,
+                    num_vectors_exp,
+                );
+            }
+
+            cap_ptr = header.next_ptr;
+        }
+
+        return PciError.MsiUncapable;
+    }
+
+    fn configureMsiRegister(
+        self: *const Self,
+        cap_addr: u8,
+        addr: msi.MessageAddress,
+        data: msi.MessageData,
+        num_vectors_exp: u3,
+    ) PciError!void {
+        var buf: [4]u32 align(8) = [_]u32{0} ** 4;
+        const msi_cap: *msi.CapabilityRegister = @constCast(@ptrCast(&buf));
+        // Read the MSI capability register.
+        for (0..4) |i| {
+            buf[i] = self.device.readDataArb(
+                self.function,
+                cap_addr + @as(u8, @truncate(i)) * 4,
+            );
+        }
+
+        // Edit the MSI capability register.
+        if (msi_cap.multi_msg_capable < num_vectors_exp) {
+            return PciError.ExceedSupportedVectors;
+        }
+        msi_cap.multi_msg_enable = num_vectors_exp;
+        msi_cap.enable = true;
+        msi_cap.msg_addr = addr;
+        msi_cap.msg_data = data;
+
+        // Write the MSI capability register.
+        for (0..4) |i| {
+            self.device.writeDataArb(
+                self.function,
+                cap_addr + @as(u8, @truncate(i)) * 4,
+                buf[i],
+            );
+        }
+    }
 };
 
 /// Add a PCI device to the known device list.
@@ -282,7 +395,6 @@ fn registerFunction(bus: u8, device: u5, function: u3) PciError!void {
     const base_class = dev.readData(function, RegisterOffsets.BaseClass);
     const subclass = dev.readData(function, RegisterOffsets.Subclass);
 
-    // TODO: register device here
     try addDevice(dev, function);
 
     if (base_class == @intFromEnum(ClassCodes.Bridge) and subclass == 0x04) {

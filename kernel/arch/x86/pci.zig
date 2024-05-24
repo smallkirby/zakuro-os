@@ -17,3 +17,8 @@ pub fn setConfigAddress(addr: ConfigAddress) void {
 pub fn getConfigData() u32 {
     return am.inl(pci.addr_configuration_data);
 }
+
+/// Set PCI configuration data.
+pub fn setConfigData(data: u32) void {
+    return am.outl(data, pci.addr_configuration_data);
+}

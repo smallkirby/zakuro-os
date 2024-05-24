@@ -80,9 +80,8 @@ export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) n
 
     // Register PCI devices.
     pci.registerAllDevices() catch |err| switch (err) {
-        error.ListFull => {
-            @panic("List of PCI devices if full. Can't register more devices.");
-        },
+        error.ListFull => @panic("List of PCI devices if full. Can't register more devices."),
+        else => @panic("Failed to register PCI devices."),
     };
     for (0..pci.num_devices) |i| {
         if (pci.devices[i]) |info| {
@@ -114,6 +113,18 @@ export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) n
         }
     }
     const xhc_dev = xhc_maybe orelse @panic("xHC controller not found.");
+    xhc_dev.configureMsi(
+        .{ .dest_id = 0 },
+        .{ .vector = 0, .assert = false },
+        0,
+    ) catch |err| switch (err) {
+        error.MsiUncapable => log.err("MSI is not supported for this device.", .{}),
+        else => {
+            log.err("Failed to configure MSI: {?}", .{err});
+            @panic("Aborting...");
+        },
+    };
+
     const bar0 = xhc_dev.device.readBar(xhc_dev.function, 0);
     const bar1 = xhc_dev.device.readBar(xhc_dev.function, 1);
     const xhc_mmio_base = (@as(u64, bar1) << 32) | @as(u64, bar0 & ~@as(u32, 0b1111));

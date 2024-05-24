@@ -3,6 +3,7 @@
 pub const serial = @import("serial.zig");
 pub const pci = @import("pci.zig");
 pub const intr = @import("interrupt.zig");
+pub const msi = @import("msi.zig");
 
 const am = @import("asm.zig");
 
