@@ -23,6 +23,17 @@ pub const std_options = klog.default_log_options;
 /// The bootloader is a UEFI app using MS x64 calling convention,
 /// so we need to use the same calling convention here.
 export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) noreturn {
+    main(fb_config) catch |err| switch (err) {
+        else => {
+            log.err("Uncaught kernel error: {?}", .{err});
+            @panic("Aborting...");
+        },
+    };
+
+    @panic("Reached unreachable EOL.");
+}
+
+fn main(fb_config: *graphics.FrameBufferConfig) !void {
     const serial = ser.init();
     klog.init(serial);
 
@@ -79,10 +90,7 @@ export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) n
     cursor.drawMouse();
 
     // Register PCI devices.
-    pci.registerAllDevices() catch |err| switch (err) {
-        error.ListFull => @panic("List of PCI devices if full. Can't register more devices."),
-        else => @panic("Failed to register PCI devices."),
-    };
+    try pci.registerAllDevices();
     for (0..pci.num_devices) |i| {
         if (pci.devices[i]) |info| {
             log.info("Found PCI device: {X:0>2}:{X:0>2}:{X:0>1} vendor={X:0>2} class={X:0>2}:{X:0>2}:{X:0>2}", .{
@@ -113,17 +121,11 @@ export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) n
         }
     }
     const xhc_dev = xhc_maybe orelse @panic("xHC controller not found.");
-    xhc_dev.configureMsi(
+    try xhc_dev.configureMsi(
         .{ .dest_id = 0 },
-        .{ .vector = 0, .assert = false },
+        .{ .vector = 0, .assert = false }, // TODO: vector
         0,
-    ) catch |err| switch (err) {
-        error.MsiUncapable => log.err("MSI is not supported for this device.", .{}),
-        else => {
-            log.err("Failed to configure MSI: {?}", .{err});
-            @panic("Aborting...");
-        },
-    };
+    );
 
     const bar0 = xhc_dev.device.readBar(xhc_dev.function, 0);
     const bar1 = xhc_dev.device.readBar(xhc_dev.function, 1);
@@ -132,10 +134,7 @@ export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) n
 
     // Initialize xHC controller.
     var xhc = drivers.usb.xhc.Controller.new(xhc_mmio_base);
-    xhc.init() catch |err| {
-        log.err("Failed to initialize xHC controller: {?}", .{err});
-        unreachable;
-    };
+    try xhc.init();
     xhc.run();
     log.info("Started xHC controller.", .{});
 
@@ -155,10 +154,7 @@ export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) n
     const mouse_observer = cursor.observer();
     zakuro.drivers.usb.cls_mouse.mouse_observer = &mouse_observer;
     while (true) {
-        xhc.processEvent() catch |err| {
-            log.err("Failed to process event: {?}", .{err});
-            @panic("Aborting...");
-        };
+        try xhc.processEvent();
     }
 
     // EOL
