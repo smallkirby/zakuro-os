@@ -62,13 +62,13 @@ fn panic(
         }
     }
 
-    bpHalt();
+    halt();
 }
 
-fn bpHalt() noreturn {
+fn halt() noreturn {
     @setCold(true);
     while (true) {
-        @breakpoint();
+        asm volatile ("hlt");
     }
 }
 

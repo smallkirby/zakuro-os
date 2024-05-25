@@ -1,86 +1,153 @@
+//! LICENSE NOTICE
+//!
+//! The impletentation is heavily inspired by https://github.com/AndreaOrru/zen
+//! Original LICENSE follows:
+//!
+//! BSD 3-Clause License
+//!
+//! Copyright (c) 2017, Andrea Orru
+//! All rights reserved.
+//!
+//! Redistribution and use in source and binary forms, with or without
+//! modification, are permitted provided that the following conditions are met:
+//!
+//! * Redistributions of source code must retain the above copyright notice, this
+//!   list of conditions and the following disclaimer.
+//!
+//! * Redistributions in binary form must reproduce the above copyright notice,
+//!   this list of conditions and the following disclaimer in the documentation
+//!   and/or other materials provided with the distribution.
+//!
+//! * Neither the name of the copyright holder nor the names of its
+//!   contributors may be used to endorse or promote products derived from
+//!   this software without specific prior written permission.
+//!
+//! THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+//! AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+//! IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+//! DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+//! FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+//! DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+//! SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+//! CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+//! OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+//! OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+//!
+
 const std = @import("std");
 const log = std.log.scoped(.intr);
 
 const am = @import("asm.zig");
+const gdt = @import("gdt.zig");
+const idt = @import("idt.zig");
+const isr = @import("isr.zig");
 
-/// Interrupt Descriptor Table.
-var idt: [256]GateDesriptor = [_]GateDesriptor{std.mem.zeroes(GateDesriptor)} ** 256;
-/// IDT Register.
-var idtr = IdtRegister{
-    .limit = @sizeOf(@TypeOf(idt)) - 1,
-    // TODO: BUG: Zig v0.12.0. https://github.com/ziglang/zig/issues/17856
-    // .base = &idt,
-    // This initialization invokes LLVM error.
-    // As a workaround, we make `idtr` mutable and initialize it in `init()`.
-    .base = undefined,
-};
+/// Interrupt handler function signature.
+pub const Handler = *const fn (*isr.Context) void;
+
+/// Interrupt handlers.
+var handlers: [256]Handler = [_]Handler{unhandledHandler} ** 256;
 
 /// Initialize the IDT.
 pub fn init() void {
-    idtr.base = &idt;
-
-    am.lidt(@intFromPtr(&idtr));
-}
-
-const IdtRegister = packed struct {
-    limit: u16,
-    base: *[256]GateDesriptor,
-};
-
-/// Entry in the Interrupt Descriptor Table.
-pub const GateDesriptor = packed struct(u128) {
-    /// Lower 16 bits of the offset to the ISR.
-    offset_low: u16,
-    /// Segment Selector that must point to a valid code segment in the GDT.
-    seg_selector: u16,
-    /// Interrupt Stack Table. Not used.
-    ist: u3 = 0,
-    /// Reserved.
-    _reserved1: u5 = 0,
-    /// Gate Type.
-    gate_type: GateType,
-    /// Reserved.
-    _reserved2: u1 = 0,
-    /// Descriptor Privilege Level is the required CPL to call the ISR via the INT inst.
-    /// Hardware interrupts ignore this field.
-    dpl: u2,
-    /// Present flag. Must be 1.
-    present: bool = true,
-    /// Middle 16 bits of the offset to the ISR.
-    offset_middle: u16,
-    /// Higher 32 bits of the offset to the ISR.
-    offset_high: u32,
-    /// Reserved.
-    _reserved3: u32 = 0,
-
-    pub fn offset(self: GateDesriptor) u64 {
-        return @as(u64, self.offset_high) << 32 | @as(u64, self.offset_middle) << 16 | @as(u64, self.offset_low);
+    inline for (0..num_system_exceptions) |i| {
+        idt.setGate(
+            i,
+            .Interrupt64,
+            isr.generateIsr(i),
+        );
     }
-};
 
-/// Gate type of the gate descriptor in IDT.
-pub const GateType = enum(u4) {
-    Invalid = 0b0000,
-    Interrupt64 = 0b1110,
-    Trap64 = 0b1111,
-};
-
-const testing = std.testing;
-
-test "gate descriptor" {
-    const gate = GateDesriptor{
-        .offset_low = 0x1234,
-        .seg_selector = 0x5678,
-        .gate_type = .Interrupt64,
-        .offset_middle = 0x9abc,
-        .offset_high = 0x0123def0,
-        .dpl = 0,
-    };
-
-    try testing.expectEqual(0x0123def0_9abc_1234, gate.offset());
+    idt.init();
 }
 
-test "IDTR limit" {
-    std.debug.print("limit: {d}\n", .{idtr.limit});
-    try testing.expectEqual(256 * 16 - 1, idtr.limit);
+/// Called from the ISR stub.
+/// Dispatches the interrupt to the appropriate handler.
+pub fn dispatch(context: *isr.Context) void {
+    const vector = context.vector;
+    handlers[vector](context);
+}
+
+fn unhandledHandler(context: *isr.Context) void {
+    log.err("============ Oops! ===================", .{});
+    log.err("Unhandled interrupt: {s}({})", .{
+        exceptionName(context.vector),
+        context.vector,
+    });
+    log.err("Error Code: 0x{X}", .{context.error_code});
+    log.err("", .{});
+    log.err("RIP: 0x{X:0>16}", .{context.rip});
+    log.err("RSP: 0x{X:0>16}", .{context.rsp});
+    log.err("EFLAGS: 0x{X:0>16}", .{context.rflags});
+    log.err("RAX: 0x{X:0>16}", .{context.registers.rax});
+    log.err("RBX: 0x{X:0>16}", .{context.registers.rbx});
+    log.err("RCX: 0x{X:0>16}", .{context.registers.rcx});
+    log.err("RDX: 0x{X:0>16}", .{context.registers.rdx});
+    log.err("RSI: 0x{X:0>16}", .{context.registers.rsi});
+    log.err("RDI: 0x{X:0>16}", .{context.registers.rdi});
+    log.err("RBP: 0x{X:0>16}", .{context.registers.rbp});
+    log.err("R8 :  0x{X:0>16}", .{context.registers.r8});
+    log.err("R9 :  0x{X:0>16}", .{context.registers.r9});
+    log.err("R10: 0x{X:0>16}", .{context.registers.r10});
+    log.err("R11: 0x{X:0>16}", .{context.registers.r11});
+    log.err("R12: 0x{X:0>16}", .{context.registers.r12});
+    log.err("R13: 0x{X:0>16}", .{context.registers.r13});
+    log.err("R14: 0x{X:0>16}", .{context.registers.r14});
+    log.err("R15: 0x{X:0>16}", .{context.registers.r15});
+    log.err("CS: 0x{X:0>4}", .{context.cs});
+    log.err("SS: 0x{X:0>4}", .{context.ss});
+
+    asm volatile ("hlt");
+}
+
+const divideByZero = 0;
+const debug = 1;
+const nonMaskableInterrupt = 2;
+const breakpoint = 3;
+const overflow = 4;
+const boundRangeExceeded = 5;
+const invalidOpcode = 6;
+const deviceNotAvailable = 7;
+const doubleFault = 8;
+const coprocessorSegmentOverrun = 9;
+const invalidTSS = 10;
+const segmentNotPresent = 11;
+const stackSegmentFault = 12;
+const generalProtectionFault = 13;
+const pageFault = 14;
+const floatingPointException = 16;
+const alignmentCheck = 17;
+const machineCheck = 18;
+const SIMDException = 19;
+const virtualizationException = 20;
+const controlProtectionExcepton = 21;
+
+const num_system_exceptions = 32;
+
+/// Get the name of an exception.
+pub inline fn exceptionName(vector: u64) []const u8 {
+    return switch (vector) {
+        divideByZero => "#DE: Divide by zero",
+        debug => "#DB: Debug",
+        nonMaskableInterrupt => "NMI: Non-maskable interrupt",
+        breakpoint => "#BP: Breakpoint",
+        overflow => "#OF: Overflow",
+        boundRangeExceeded => "#BR: Bound range exceeded",
+        invalidOpcode => "#UD: Invalid opcode",
+        deviceNotAvailable => "#NM: Device not available",
+        doubleFault => "#DF: Double fault",
+        coprocessorSegmentOverrun => "Coprocessor segment overrun",
+        invalidTSS => "#TS: Invalid TSS",
+        segmentNotPresent => "#NP: Segment not present",
+        stackSegmentFault => "#SS: Stack-segment fault",
+        generalProtectionFault => "#GP: General protection fault",
+        pageFault => "#PF: Page fault",
+        floatingPointException => "#MF: Floating-point exception",
+        alignmentCheck => "#AC: Alignment check",
+        machineCheck => "#MC: Machine check",
+        SIMDException => "#XM: SIMD exception",
+        virtualizationException => "#VE: Virtualization exception",
+        controlProtectionExcepton => "#CP: Control protection exception",
+        else => "Unknown exception",
+    };
 }

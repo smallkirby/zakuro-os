@@ -30,7 +30,7 @@ export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) n
         },
     };
 
-    @panic("Reached unreachable EOL.");
+    unreachable;
 }
 
 fn main(fb_config: *graphics.FrameBufferConfig) !void {
