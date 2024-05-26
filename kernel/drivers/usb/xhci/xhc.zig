@@ -183,23 +183,19 @@ pub const Controller = struct {
         self.event_ring.erst[0].size = num_trbs;
 
         const primary_interrupter: *volatile Regs.InterrupterRegisterSet = self.getPrimaryInterrupter();
-        var new_interrupter = primary_interrupter.*;
-        new_interrupter.erstsz = 1;
-        new_interrupter.erdp = (@intFromPtr(self.event_ring.trbs.ptr) & ~@as(u64, 0b1111)) | (primary_interrupter.erdp & 0b1111);
-        new_interrupter.erstba = @intFromPtr(self.event_ring.erst.ptr);
-        primary_interrupter.* = new_interrupter;
+        primary_interrupter.erstsz = 1;
+        primary_interrupter.erdp = (@intFromPtr(self.event_ring.trbs.ptr) & ~@as(u64, 0b1111)) | (primary_interrupter.erdp & 0b1111);
+        primary_interrupter.erstba = @intFromPtr(self.event_ring.erst.ptr);
         self.event_ring.interrupter = primary_interrupter;
 
         // Enable interrupts
-        new_interrupter = primary_interrupter.*;
-        new_interrupter.imod.modify(.{
+        primary_interrupter.imod.modify(.{
             .imodi = 4000,
         });
-        new_interrupter.iman.modify(.{
+        primary_interrupter.iman.modify(.{
             .ip = true,
             .ie = true,
         });
-        primary_interrupter.* = new_interrupter;
 
         self.operational_regs.usbcmd.modify(.{
             .inte = true,
