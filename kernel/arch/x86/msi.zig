@@ -53,7 +53,7 @@ pub const MessageData = packed struct(u32) {
     /// Intrerrupt Vector.
     vector: u8,
     /// Delivery Mode.
-    dm: DeliceryMode = .Fixed,
+    dm: DeliveryMode = .Fixed,
     /// Reserved.
     _reserved1: u3 = 0,
     /// Assertion.
@@ -71,7 +71,7 @@ const DestinationMode = enum(u1) {
     Logical = 1,
 };
 
-const DeliceryMode = enum(u3) {
+const DeliveryMode = enum(u3) {
     Fixed = 0b000,
     LowestPriority = 0b001,
     SMI = 0b010,
