@@ -258,6 +258,11 @@ pub const Controller = struct {
         }
     }
 
+    /// Check if an event is queued in the Event Ring.
+    pub fn hasEvent(self: *Self) bool {
+        return self.event_ring.hasEvent();
+    }
+
     /// Process an event queued in the Event Ring.
     pub fn processEvent(self: *Self) !void {
         self.checkError();

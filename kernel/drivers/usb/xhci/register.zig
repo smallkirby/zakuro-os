@@ -259,7 +259,7 @@ pub const InterrupterRegisterSet = packed struct(u256) {
     /// Event Ring Segment Table Base Address Register.
     erstba: u64,
     /// Event Ring Dequeue Pointer Register.
-    /// TODO: 3 LSBs are used as DESI and EHB.
+    /// 4 LSBs are used as DESI and EHB.
     erdp: u64,
 };
 

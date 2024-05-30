@@ -349,6 +349,11 @@ pub const DeviceInfo = struct {
         data: msi.MessageData,
         num_vectors_exp: u3,
     ) PciError!void {
+        log.debug(
+            "Configuring MSI for device: {d}:{d}:{d}, vector=2^{d}",
+            .{ self.device.bus, self.device.device, self.function, num_vectors_exp },
+        );
+
         var buf: [4]u32 align(8) = [_]u32{0} ** 4;
         const msi_cap: *msi.CapabilityRegister = @constCast(@ptrCast(&buf));
         // Read the MSI capability register.

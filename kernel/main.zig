@@ -19,6 +19,8 @@ pub const panic = @import("panic.zig").panic_fn;
 /// Override log impl
 pub const std_options = klog.default_log_options;
 
+var xhc: drivers.usb.xhc.Controller = undefined;
+
 /// Kernel entry point called from the bootloader.
 /// The bootloader is a UEFI app using MS x64 calling convention,
 /// so we need to use the same calling convention here.
@@ -121,9 +123,10 @@ fn main(fb_config: *graphics.FrameBufferConfig) !void {
         }
     }
     const xhc_dev = xhc_maybe orelse @panic("xHC controller not found.");
+    intr.registerHandler(mouse.intr_vector, &mouseHandler);
     try xhc_dev.configureMsi(
-        .{ .dest_id = 0 },
-        .{ .vector = 0, .assert = false }, // TODO: vector
+        .{ .dest_id = arch.getBspLapicId() },
+        .{ .vector = mouse.intr_vector, .assert = true },
         0,
     );
 
@@ -133,7 +136,7 @@ fn main(fb_config: *graphics.FrameBufferConfig) !void {
     log.info("xHC MMIO base: 0x{X}", .{xhc_mmio_base});
 
     // Initialize xHC controller.
-    var xhc = drivers.usb.xhc.Controller.new(xhc_mmio_base);
+    xhc = drivers.usb.xhc.Controller.new(xhc_mmio_base);
     try xhc.init();
     xhc.run();
     log.info("Started xHC controller.", .{});
@@ -153,13 +156,19 @@ fn main(fb_config: *graphics.FrameBufferConfig) !void {
 
     const mouse_observer = cursor.observer();
     zakuro.drivers.usb.cls_mouse.mouse_observer = &mouse_observer;
-    while (true) {
-        try xhc.processEvent();
-    }
 
     // EOL
     log.info("Reached end of kernel. Halting...", .{});
     while (true) {
         asm volatile ("hlt");
     }
+}
+
+fn mouseHandler(_: *intr.Context) void {
+    while (xhc.hasEvent()) {
+        xhc.processEvent() catch |err| {
+            log.err("Failed to process xHC event: {?}", .{err});
+        };
+    }
+    intr.notifyEoi();
 }

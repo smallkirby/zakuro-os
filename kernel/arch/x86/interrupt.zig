@@ -42,8 +42,11 @@ const gdt = @import("gdt.zig");
 const idt = @import("idt.zig");
 const isr = @import("isr.zig");
 
+/// Context for interrupt handlers.
+pub const Context = isr.Context;
+
 /// Interrupt handler function signature.
-pub const Handler = *const fn (*isr.Context) void;
+pub const Handler = *const fn (*Context) void;
 
 /// Interrupt handlers.
 var handlers: [256]Handler = [_]Handler{unhandledHandler} ** 256;
@@ -61,14 +64,24 @@ pub fn init() void {
     idt.init();
 }
 
+/// Register interrupt handler.
+pub fn registerHandler(comptime vector: u8, handler: Handler) void {
+    handlers[vector] = handler;
+    idt.setGate(
+        vector,
+        .Interrupt64,
+        isr.generateIsr(vector),
+    );
+}
+
 /// Called from the ISR stub.
 /// Dispatches the interrupt to the appropriate handler.
-pub fn dispatch(context: *isr.Context) void {
+pub fn dispatch(context: *Context) void {
     const vector = context.vector;
     handlers[vector](context);
 }
 
-fn unhandledHandler(context: *isr.Context) void {
+fn unhandledHandler(context: *Context) void {
     log.err("============ Oops! ===================", .{});
     log.err("Unhandled interrupt: {s}({})", .{
         exceptionName(context.vector),

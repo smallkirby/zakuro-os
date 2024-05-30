@@ -8,6 +8,9 @@ const Vector = zakuro.Vector;
 const colors = zakuro.color;
 const MouseObserver = zakuro.drivers.usb.MouseObserver;
 
+/// Interrupt number for a mouse device.
+pub const intr_vector = 0x30;
+
 /// Width of the mouse cursor.
 const mouse_cursor_width = 12;
 /// Height of the mouse cursor.
