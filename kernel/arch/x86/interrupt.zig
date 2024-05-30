@@ -62,6 +62,14 @@ pub fn init() void {
     }
 
     idt.init();
+
+    asm volatile ("sti");
+}
+
+/// Notify the LAPIC that the interrupt has been handled.
+pub fn notifyEoi() void {
+    const eoi: *volatile u32 = @ptrFromInt(0xFEE000B0);
+    eoi.* = 0;
 }
 
 /// Register interrupt handler.
