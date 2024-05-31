@@ -23,5 +23,5 @@ zig build
 To run the OS in QEMU:
 
 ```bash
-zig build run
+zig build run -Dprettylog
 ```

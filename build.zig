@@ -85,11 +85,22 @@ pub fn build(b: *std.Build) void {
         run_clint_step.dependOn(&run_clint_cmd.step);
     }
 
+    // Options
+    const prettylog = b.option(
+        bool,
+        "prettylog",
+        "Enable pretty log output",
+    ) orelse false;
+    const options = b.addOptions();
+    options.addOption(bool, "prettylog", prettylog);
+
     // Zakuro module
     const zakuro = b.createModule(.{
         .root_source_file = b.path("kernel/zakuro.zig"),
     });
     zakuro.addImport("zakuro", zakuro);
+    zakuro.addImport("chameleon", chameleon.module("chameleon"));
+    zakuro.addOptions("option", options);
 
     // Main binary
     var kernel: *std.Build.Step.Compile = undefined;
@@ -110,6 +121,7 @@ pub fn build(b: *std.Build) void {
         kernel.link_z_relro = false;
         kernel.entry = .{ .symbol_name = "kernel_main" };
         kernel.addObjectFile(makefont_output);
+
         kernel.root_module.addImport("zakuro", zakuro);
 
         b.installArtifact(kernel);

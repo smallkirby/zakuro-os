@@ -1,11 +1,15 @@
 //! This module provides a logging to the serial console.
 
 const std = @import("std");
+const format = std.fmt.format;
+const option = @import("option");
+
 const zakuro = @import("zakuro");
 const Serial = zakuro.serial.Serial;
 const stdlog = std.log;
 const io = std.io;
-const format = std.fmt.format;
+
+const Chameleon = @import("chameleon").Chameleon;
 
 var serial: Serial = undefined;
 
@@ -41,15 +45,31 @@ fn log(
     args: anytype,
 ) void {
     const level_str = comptime switch (level) {
-        .debug => "[DEBUG] ",
-        .info => "[INFO ] ",
-        .warn => "[WARN ] ",
-        .err => "[ERROR] ",
+        .debug => "[DEBUG]",
+        .info => "[INFO ]",
+        .warn => "[WARN ]",
+        .err => "[ERROR]",
     };
     const scope_str = if (scope == .default) ": " else "(" ++ @tagName(scope) ++ "): ";
-    format(
-        Writer{ .context = {} },
-        level_str ++ scope_str ++ fmt ++ "\n",
-        args,
-    ) catch unreachable;
+
+    if (option.prettylog) {
+        comptime var cham = Chameleon.init(.Auto);
+        const chameleon = switch (level) {
+            .debug => cham.bgGray().bold(),
+            .info => cham.bgBlue().bold(),
+            .warn => cham.bgYellow().bold(),
+            .err => cham.bgRed().bold(),
+        };
+        format(
+            Writer{ .context = {} },
+            chameleon.fmt(level_str) ++ " " ++ scope_str ++ fmt ++ "\n",
+            args,
+        ) catch unreachable;
+    } else {
+        format(
+            Writer{ .context = {} },
+            level_str ++ " " ++ scope_str ++ fmt ++ "\n",
+            args,
+        ) catch unreachable;
+    }
 }
