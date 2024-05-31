@@ -138,6 +138,5 @@ test "gate descriptor" {
 }
 
 test "IDTR limit" {
-    std.debug.print("limit: {d}\n", .{idtr.limit});
     try testing.expectEqual(256 * 16 - 1, idtr.limit);
 }
