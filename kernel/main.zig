@@ -1,8 +1,9 @@
 //! Kernel entry point.
 
 const std = @import("std");
-const zakuro = @import("zakuro");
 const log = std.log.scoped(.main);
+
+const zakuro = @import("zakuro");
 const console = zakuro.console;
 const klog = zakuro.log;
 const ser = zakuro.serial;
@@ -13,13 +14,36 @@ const drivers = zakuro.drivers;
 const mouse = zakuro.mouse;
 const arch = zakuro.arch;
 const intr = zakuro.arch.intr;
+const FixedSizeQueue = zakuro.lib.queue.FixedSizeQueue;
 
 /// Override panic impl
 pub const panic = @import("panic.zig").panic_fn;
 /// Override log impl
 pub const std_options = klog.default_log_options;
 
+/// xHC controller.
+/// TODO: Move this to a proper place.
 var xhc: drivers.usb.xhc.Controller = undefined;
+/// Interrupt queue.
+/// TODO: Move this to a proper place.
+var intr_queue: FixedSizeQueue(IntrMessage) = undefined;
+
+/// Buffer used by fixed-size allocator.
+/// TODO: use kernel allocator whin it's ready.
+var general_buf = [_]u8{0} ** (4096 * 3);
+/// TODO: use kernel allocator whin it's ready.
+var fsa = std.heap.FixedBufferAllocator.init(&general_buf);
+
+/// Interrupt message.
+/// The message is queued in the interrupt handler and processed in the main loop.
+/// TODO: Move this to a proper place.
+const IntrMessage = struct {
+    /// Type of the message.
+    typ: enum {
+        /// Mouse event.
+        Mouse,
+    },
+};
 
 /// Kernel entry point called from the bootloader.
 /// The bootloader is a UEFI app using MS x64 calling convention,
@@ -46,6 +70,14 @@ fn main(fb_config: *graphics.FrameBufferConfig) !void {
     intr.init();
     log.info("Initialized IDT.", .{});
 
+    // Initialize FSA
+    // TODO: Use kernel allocator when it's ready.
+    const allocator = fsa.allocator();
+
+    // Initialize interrupt queue
+    intr_queue = try FixedSizeQueue(IntrMessage).init(16, allocator);
+
+    // Initialize graphic console
     const pixel_writer = graphics.PixelWriter.new(fb_config);
     var con = console.Console.new(pixel_writer, color.GBFg, color.GBBg);
 
@@ -157,18 +189,47 @@ fn main(fb_config: *graphics.FrameBufferConfig) !void {
     const mouse_observer = cursor.observer();
     zakuro.drivers.usb.cls_mouse.mouse_observer = &mouse_observer;
 
+    // Loop to process interrupt messages
+    while (true) {
+        // Check if there is any interrupt message
+        arch.disableIntr();
+        {
+            if (intr_queue.len == 0) {
+                arch.enableIntr();
+                arch.halt();
+                continue;
+            }
+        }
+        arch.enableIntr();
+
+        // Process the message
+        if (intr_queue.pop()) |msg| {
+            switch (msg.typ) {
+                .Mouse => handleMouseMessage(),
+            }
+        }
+    }
+
     // EOL
     log.info("Reached end of kernel. Halting...", .{});
     while (true) {
-        asm volatile ("hlt");
+        arch.halt();
     }
 }
 
+// TODO: Move this to a proper place.
 fn mouseHandler(_: *intr.Context) void {
+    intr_queue.push(.{ .typ = .Mouse }) catch |err| {
+        log.err("Failed to push mouse event to the queue: {?}", .{err});
+    };
+    intr.notifyEoi();
+}
+
+// TODO: Move this to a proper place.
+fn handleMouseMessage() void {
     while (xhc.hasEvent()) {
         xhc.processEvent() catch |err| {
             log.err("Failed to process xHC event: {?}", .{err});
         };
     }
-    intr.notifyEoi();
 }

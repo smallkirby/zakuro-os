@@ -17,6 +17,22 @@ pub fn getBspLapicId() u8 {
     return @truncate(@as(*u32, @ptrFromInt(0x0FEE_0020)).* >> 24);
 }
 
+/// Disable interrupts.
+/// Note that exceptions and NMI are not ignored.
+pub inline fn disableIntr() void {
+    am.cli();
+}
+
+/// Enable interrupts.
+pub inline fn enableIntr() void {
+    am.sti();
+}
+
+/// Halt the current CPU.
+pub inline fn halt() void {
+    am.hlt();
+}
+
 test {
     @import("std").testing.refAllDeclsRecursive(@This());
 }
