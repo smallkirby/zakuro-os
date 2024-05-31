@@ -1,7 +1,7 @@
 # Zakuro OS
 
 ![Zig](https://shields.io/badge/Zig-v0%2E12%2E0-blue?logo=zig&color=F7A41D&style=for-the-badge)
-![EDK2 CLANGPDB](https://shields.io/badge/EDK2_CLANGPDB-Tested_on_clang--17-blue?logo=llvm&color=262D3A&style=for-the-badge)
+![EDK2 CLANGPDB](https://shields.io/badge/EDK2_CLANGPDB-Tested_on_clang--18-blue?logo=llvm&color=262D3A&style=for-the-badge)
 
 ![Lint](https://github.com/smallkirby/zakuro-os/actions/workflows/lint.yml/badge.svg)
 ![Test](https://github.com/smallkirby/zakuro-os/actions/workflows/test.yml/badge.svg)

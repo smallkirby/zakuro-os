@@ -10,11 +10,11 @@ on:
 
 env:
   ZIG_VERSION: 0.12.0
-  LLVM_VERSION: 17
+  LLVM_VERSION: 18
 
 jobs:
   test:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v2
         with:
@@ -23,7 +23,7 @@ jobs:
       - name: Install dependency
         run: |
           wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
-          sudo add-apt-repository 'deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-17 main'
+          sudo add-apt-repository 'deb http://apt.llvm.org/noble/ llvm-toolchain-noble-18 main'
           sudo apt update
           sudo apt install -y \
             git sudo gcc g++ make cmake curl wget vim clang-${{env.LLVM_VERSION}} lld-${{env.LLVM_VERSION}} \
@@ -37,14 +37,14 @@ jobs:
 
       - name: Update alternatives
         run: |
-          sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-17 100
-          sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-17 100
-          sudo update-alternatives --install /usr/bin/llvm-config llvm-config /usr/bin/llvm-config-17 100
-          sudo update-alternatives --install /usr/bin/llvm-lib llvm-lib /usr/bin/llvm-lib-17 100
-          sudo update-alternatives --install /usr/bin/llvm-link llvm-link /usr/bin/llvm-link-17 100
-          sudo update-alternatives --install /usr/bin/llvm-ar llvm-ar /usr/bin/llvm-ar-17 100
-          sudo update-alternatives --install /usr/bin/llvm-rc llvm-rc /usr/bin/llvm-rc-17 100
-          sudo update-alternatives --install /usr/bin/lld-link lld-link /usr/bin/lld-link-17 100
+          sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-${{env.LLVM_VERSION}} 100
+          sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-${{env.LLVM_VERSION}} 100
+          sudo update-alternatives --install /usr/bin/llvm-config llvm-config /usr/bin/llvm-config-${{env.LLVM_VERSION}} 100
+          sudo update-alternatives --install /usr/bin/llvm-lib llvm-lib /usr/bin/llvm-lib-${{env.LLVM_VERSION}} 100
+          sudo update-alternatives --install /usr/bin/llvm-link llvm-link /usr/bin/llvm-link-${{env.LLVM_VERSION}} 100
+          sudo update-alternatives --install /usr/bin/llvm-ar llvm-ar /usr/bin/llvm-ar-${{env.LLVM_VERSION}} 100
+          sudo update-alternatives --install /usr/bin/llvm-rc llvm-rc /usr/bin/llvm-rc-${{env.LLVM_VERSION}} 100
+          sudo update-alternatives --install /usr/bin/lld-link lld-link /usr/bin/lld-link-${{env.LLVM_VERSION}} 100
 
       - name: Unit Tests
         run: |
