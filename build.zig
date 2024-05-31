@@ -86,13 +86,33 @@ pub fn build(b: *std.Build) void {
     }
 
     // Options
-    const prettylog = b.option(
-        bool,
-        "prettylog",
-        "Enable pretty log output",
-    ) orelse false;
-    const options = b.addOptions();
-    options.addOption(bool, "prettylog", prettylog);
+    var options: *std.Build.Step.Options = undefined;
+    {
+        const prettylog = b.option(
+            bool,
+            "prettylog",
+            "Enable pretty log output",
+        ) orelse false;
+        const s_log_level = b.option(
+            []const u8,
+            "log_level",
+            "Log level",
+        ) orelse "debug";
+        const log_level: std.log.Level = if (std.mem.eql(u8, s_log_level, "debug"))
+            .debug
+        else if (std.mem.eql(u8, s_log_level, "info"))
+            .info
+        else if (std.mem.eql(u8, s_log_level, "warn"))
+            .warn
+        else if (std.mem.eql(u8, s_log_level, "error"))
+            .err
+        else
+            @panic("Invalid log level");
+
+        options = b.addOptions();
+        options.addOption(bool, "prettylog", prettylog);
+        options.addOption(std.log.Level, "log_level", log_level);
+    }
 
     // Zakuro module
     const zakuro = b.createModule(.{

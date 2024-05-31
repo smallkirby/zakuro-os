@@ -21,7 +21,12 @@ const Writer = std.io.Writer(
 );
 
 pub const default_log_options = std.Options{
-    .log_level = .debug,
+    .log_level = switch (option.log_level) {
+        .debug => .debug,
+        .info => .info,
+        .warn => .warn,
+        .err => .err,
+    },
     .logFn = log,
 };
 
