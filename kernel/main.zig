@@ -23,6 +23,10 @@ pub const panic = @import("panic.zig").panic_fn;
 /// Override log impl
 pub const std_options = klog.default_log_options;
 
+const kstack_size = arch.page_size * 0x30;
+/// Kernel stack
+var kstack: [kstack_size]u8 align(16) = [_]u8{0} ** kstack_size;
+
 /// xHC controller.
 /// TODO: Move this to a proper place.
 var xhc: drivers.usb.xhc.Controller = undefined;
@@ -48,13 +52,30 @@ const IntrMessage = struct {
 };
 
 /// Kernel entry point called from the bootloader.
+/// This function switches to the kernel stack and calls `kernel_main`.
+export fn kernel_entry() callconv(.Naked) noreturn {
+    asm volatile (
+        \\movq %[new_stack], %%rsp
+        \\call kernel_main
+        :
+        : [new_stack] "r" (@intFromPtr(&kstack) + kstack_size),
+    );
+}
+
+/// Kernel Zig entry point called from UEFI via kernel_entry.
 /// The bootloader is a UEFI app using MS x64 calling convention,
 /// so we need to use the same calling convention here.
 export fn kernel_main(
     fb_config: *graphics.FrameBufferConfig,
     memory_map: *MemoryMap,
 ) callconv(.Win64) noreturn {
-    main(fb_config, memory_map) catch |err| switch (err) {
+    // This function runs on the new kernel stack,
+    // but the arguments are still placed in the old stack.
+    // Therefore, we copy the arguments in the new stack and pass their pointers to `main`.
+    var new_fb_config = fb_config.*;
+    var new_memory_map = memory_map.*;
+
+    main(&new_fb_config, &new_memory_map) catch |err| switch (err) {
         else => {
             log.err("Uncaught kernel error: {?}", .{err});
             @panic("Aborting...");

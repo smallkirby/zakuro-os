@@ -7,6 +7,11 @@ pub const msi = @import("msi.zig");
 
 const am = @import("asm.zig");
 
+/// Page size.
+pub const page_size: usize = 4096;
+/// Page shift in bits.
+pub const page_shift: usize = 12;
+
 /// Pause a CPU for a short period of time.
 pub fn relax() void {
     am.relax();

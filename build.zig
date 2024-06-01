@@ -139,7 +139,7 @@ pub fn build(b: *std.Build) void {
         kernel.root_module.red_zone = false;
         kernel.image_base = 0x10_0000;
         kernel.link_z_relro = false;
-        kernel.entry = .{ .symbol_name = "kernel_main" };
+        kernel.entry = .{ .symbol_name = "kernel_entry" };
         kernel.addObjectFile(makefont_output);
 
         kernel.root_module.addImport("zakuro", zakuro);

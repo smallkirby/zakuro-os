@@ -51,14 +51,21 @@ pub const MemoryDescriptor = extern struct {
 
 /// EFI memory types.
 pub const EfiMemoryType = enum(u32) {
+    /// Not usable.
     ReservedMemoryType,
+    /// Code of the loaded UEFI app (bootloader).
     LoaderCode,
+    /// Data of the loaded UEFI app (bootloader) and memory pool.
     LoaderData,
+    /// Code of UEFI Boot Service Driver.
     BootServicesCode,
+    /// Data of UEFI Boot Service Driver.
     BootServicesData,
     RuntimeServicesCode,
     RuntimeServicesData,
+    /// Memory available for general use.
     ConventionalMemory,
+    /// Memory that contains errors.
     UnusableMemory,
     ACPIReclaimMemory,
     ACPIMemoryNVS,
@@ -68,6 +75,17 @@ pub const EfiMemoryType = enum(u32) {
     PersistentMemory,
     UnacceptedMemoryType,
     MaxMemoryType,
+
+    /// Check if the memory type is available for general use by OS.
+    pub fn is_available(self: EfiMemoryType) bool {
+        return switch (self) {
+            .LoaderCode,
+            .LoaderData,
+            .ConventionalMemory,
+            => true,
+            else => false,
+        };
+    }
 };
 
 const testing = std.testing;
