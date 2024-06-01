@@ -320,9 +320,10 @@ EFI_STATUS EFIAPI UefiMain(EFI_HANDLE image_handle,
   }
 
 #define ELF_OFFSET_TO_ENTRYPOINT 24
-  typedef void EntryPointType(const struct FrameBufferConfig *);
+  typedef void EntryPointType(const struct FrameBufferConfig *,
+                              const struct MemoryMap *);
   UINT64 entry_addr = *(UINT64 *)(kernel_first_addr + ELF_OFFSET_TO_ENTRYPOINT);
-  ((EntryPointType *)entry_addr)(&config);
+  ((EntryPointType *)entry_addr)(&config, &memmap);
 
   // unreachable
 

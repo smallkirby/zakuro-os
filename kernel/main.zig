@@ -15,6 +15,8 @@ const mouse = zakuro.mouse;
 const arch = zakuro.arch;
 const intr = zakuro.arch.intr;
 const FixedSizeQueue = zakuro.lib.queue.FixedSizeQueue;
+const mm = zakuro.mm;
+const MemoryMap = mm.map.MemoryMap;
 
 /// Override panic impl
 pub const panic = @import("panic.zig").panic_fn;
@@ -48,8 +50,11 @@ const IntrMessage = struct {
 /// Kernel entry point called from the bootloader.
 /// The bootloader is a UEFI app using MS x64 calling convention,
 /// so we need to use the same calling convention here.
-export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) noreturn {
-    main(fb_config) catch |err| switch (err) {
+export fn kernel_main(
+    fb_config: *graphics.FrameBufferConfig,
+    memory_map: *MemoryMap,
+) callconv(.Win64) noreturn {
+    main(fb_config, memory_map) catch |err| switch (err) {
         else => {
             log.err("Uncaught kernel error: {?}", .{err});
             @panic("Aborting...");
@@ -59,7 +64,12 @@ export fn kernel_main(fb_config: *graphics.FrameBufferConfig) callconv(.Win64) n
     unreachable;
 }
 
-fn main(fb_config: *graphics.FrameBufferConfig) !void {
+fn main(
+    fb_config: *graphics.FrameBufferConfig,
+    memory_map: *MemoryMap,
+) !void {
+    _ = memory_map; // autofix
+
     const serial = ser.init();
     klog.init(serial);
 

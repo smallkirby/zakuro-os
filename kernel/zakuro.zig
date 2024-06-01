@@ -11,6 +11,7 @@ pub const font = @import("font.zig");
 pub const drivers = @import("drivers.zig");
 pub const mmio = @import("mmio.zig");
 pub const mouse = @import("mouse.zig");
+pub const mm = @import("mm.zig");
 
 pub const lib = @import("lib.zig");
 
