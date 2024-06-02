@@ -79,6 +79,14 @@ pub inline fn hlt() void {
     asm volatile ("hlt");
 }
 
+pub inline fn loadCr3(cr3: u64) void {
+    asm volatile (
+        \\mov %[cr3], %%cr3
+        :
+        : [cr3] "r" (cr3),
+    );
+}
+
 /// Pause the CPU for a short period of time.
 pub fn relax() void {
     asm volatile ("rep; nop");

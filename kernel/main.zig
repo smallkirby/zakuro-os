@@ -105,6 +105,9 @@ fn main(
     arch.gdt.init();
     log.info("Initialized GDT.", .{});
 
+    // Initialize paging.
+    arch.page.initIdentityMapping();
+
     // Initialize FSA
     // TODO: Use kernel allocator when it's ready.
     const allocator = fsa.allocator();

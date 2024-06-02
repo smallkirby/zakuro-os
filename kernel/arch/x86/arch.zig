@@ -5,6 +5,7 @@ pub const pci = @import("pci.zig");
 pub const intr = @import("interrupt.zig");
 pub const msi = @import("msi.zig");
 pub const gdt = @import("gdt.zig");
+pub const page = @import("page.zig");
 
 const am = @import("asm.zig");
 
