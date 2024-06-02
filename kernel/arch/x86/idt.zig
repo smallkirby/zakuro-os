@@ -71,7 +71,7 @@ pub fn setGate(
 ) void {
     idt[index] = GateDesriptor{
         .offset_low = @truncate(@intFromPtr(&offset)),
-        .seg_selector = gdt.kernel_cs,
+        .seg_selector = gdt.kernel_cs_index << 3,
         .gate_type = gate_type,
         .offset_middle = @truncate(@as(u64, @intFromPtr(&offset)) >> 16),
         .offset_high = @truncate(@as(u64, @intFromPtr(&offset)) >> 32),

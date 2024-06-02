@@ -10,29 +10,29 @@ var gdt: [max_num_gdt]SegmentDescriptor align(16) = [_]SegmentDescriptor{
 var gdtr = GdtRegister{
     .limit = @sizeOf(@TypeOf(gdt)) - 1,
     // TODO: BUG: Zig v0.12.0. https://github.com/ziglang/zig/issues/17856
-    // .base = &idt,
+    // .base = &gdt,
     // This initialization invokes LLVM error.
     // As a workaround, we make `gdtr` mutable and initialize it in `init()`.
     .base = undefined,
 };
 
-const null_desc: u16 = 0x00;
-pub const kernel_ds: u16 = 0x01;
-pub const kernel_cs: u16 = 0x02;
+const null_desc_index: u16 = 0x00;
+pub const kernel_ds_index: u16 = 0x01;
+pub const kernel_cs_index: u16 = 0x02;
 
 /// Initialize the GDT.
 pub fn init() void {
     gdtr.base = &gdt;
 
-    gdt[null_desc] = SegmentDescriptor.new_null();
-    gdt[kernel_cs] = SegmentDescriptor.new(
+    gdt[null_desc_index] = SegmentDescriptor.new_null();
+    gdt[kernel_cs_index] = SegmentDescriptor.new(
         .CodeER,
         0,
         0xfffff,
         0,
         .KByte,
     );
-    gdt[kernel_ds] = SegmentDescriptor.new(
+    gdt[kernel_ds_index] = SegmentDescriptor.new(
         .DataRW,
         0,
         0xfffff,
@@ -51,7 +51,7 @@ pub fn init() void {
 
 /// Load the kernel data segment selector.
 /// This function leads to flush the changes of DS in the GDT.
-export fn loadKernelDs() void {
+fn loadKernelDs() void {
     asm volatile (
         \\mov %[kernel_ds], %di
         \\mov %%di, %%ds
@@ -60,7 +60,7 @@ export fn loadKernelDs() void {
         \\mov %%di, %%gs
         \\mov %%di, %%ss
         :
-        : [kernel_ds] "n" (@as(u32, kernel_ds << 3)),
+        : [kernel_ds] "n" (@as(u32, kernel_ds_index << 3)),
     );
 }
 
@@ -80,7 +80,7 @@ fn loadKernelCs() void {
         \\next:
         \\
         :
-        : [kernel_cs] "n" (@as(u32, kernel_cs << 3)),
+        : [kernel_cs] "n" (@as(u32, kernel_cs_index << 3)),
     );
 }
 

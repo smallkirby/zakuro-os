@@ -29,4 +29,5 @@ qemu-system-x86_64 \
   -device usb-mouse \
   -device usb-kbd \
   -serial mon:stdio \
+  -no-reboot \
   -s
