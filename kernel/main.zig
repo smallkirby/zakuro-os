@@ -101,6 +101,10 @@ fn main(
     intr.init();
     log.info("Initialized IDT.", .{});
 
+    // Initialize GDT
+    arch.gdt.init();
+    log.info("Initialized GDT.", .{});
+
     // Initialize FSA
     // TODO: Use kernel allocator when it's ready.
     const allocator = fsa.allocator();
