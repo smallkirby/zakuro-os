@@ -107,8 +107,8 @@ fn unhandledHandler(context: *Context) void {
     log.err("RSI: 0x{X:0>16}", .{context.registers.rsi});
     log.err("RDI: 0x{X:0>16}", .{context.registers.rdi});
     log.err("RBP: 0x{X:0>16}", .{context.registers.rbp});
-    log.err("R8 :  0x{X:0>16}", .{context.registers.r8});
-    log.err("R9 :  0x{X:0>16}", .{context.registers.r9});
+    log.err("R8 : 0x{X:0>16}", .{context.registers.r8});
+    log.err("R9 : 0x{X:0>16}", .{context.registers.r9});
     log.err("R10: 0x{X:0>16}", .{context.registers.r10});
     log.err("R11: 0x{X:0>16}", .{context.registers.r11});
     log.err("R12: 0x{X:0>16}", .{context.registers.r12});
