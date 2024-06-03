@@ -16,7 +16,7 @@ const arch = zakuro.arch;
 const intr = zakuro.arch.intr;
 const FixedSizeQueue = zakuro.lib.queue.FixedSizeQueue;
 const mm = zakuro.mm;
-const MemoryMap = mm.map.MemoryMap;
+const MemoryMap = mm.uefi.MemoryMap;
 
 /// Override panic impl
 pub const panic = @import("panic.zig").panic_fn;

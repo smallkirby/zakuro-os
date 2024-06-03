@@ -1,3 +1,5 @@
+//! This module defines a UEFI memory map structures.
+
 const std = @import("std");
 
 /// Thin wrapper struct for memory map passed to by the bootloader.
