@@ -26,11 +26,11 @@ const PageDirectory = [num_table_entries]PdtEntry;
 /// 3rd level page table.
 /// TODO: For now, we use identity mapping only. So we only need 3 levels of page tables.
 ///     In the identity mapping, each page table entry maps 1GiB of memory.
-var page_direcotry: [64]PageDirectory align(page_size_4k) = [_]PageDirectory{
+var page_direcotry: [num_table_entries]PageDirectory align(page_size_4k) = [_]PageDirectory{
     [_]PdtEntry{
         PdtEntry.new_nopresent(),
     } ** num_table_entries,
-} ** 64;
+} ** num_table_entries;
 
 /// Construct the identity mapping and switch to it.
 /// This function uses 2MiB pages to reduce the number of page table entries.
@@ -41,18 +41,52 @@ pub fn initIdentityMapping() void {
     pml4_table[0] = Pml4Entry.new(&pdp_table[0]);
 
     // Construct PDPT table and 2MiB PDT entries.
-    for (0..64) |i| {
-        pdp_table[i] = PdptEntry.new(@intFromPtr(&page_direcotry[i]));
+    for (0..num_table_entries) |pdp_i| {
+        pdp_table[pdp_i] = PdptEntry.new(@intFromPtr(&page_direcotry[pdp_i]));
 
-        for (0..512) |j| {
-            page_direcotry[i][j] = PdtEntry.new_4mb(
-                i * page_size_1gb + j * page_size_2mb,
+        for (0..num_table_entries) |pdt_i| {
+            page_direcotry[pdp_i][pdt_i] = PdtEntry.new_4mb(
+                pdp_i * page_size_1gb + pdt_i * page_size_2mb,
             );
         }
     }
 
     // Load CR3 register.
     am.loadCr3(@intFromPtr(&pml4_table[0]));
+}
+
+/// Maps the given virtual address to the physical address identity for 2MiB page.
+/// TODO: this is a temporary implementation to workaround the problem
+/// that xHC MMIO address exceeds 16GiB.
+pub fn mapIdentity(vaddr: u64, allocator: Allocator) !void {
+    // TODO: remove magic numbers.
+    const pml4_index = (vaddr >> 39) & 0x1FF;
+    const pdp_index = (vaddr >> 30) & 0x1FF;
+    const pdt_index = (vaddr >> 21) & 0x1FF;
+
+    const pml4_ent = &pml4_table[pml4_index];
+    if (!pml4_ent.present) {
+        const pdpt = try allocator.alloc(PdptEntry, num_table_entries);
+        pml4_ent.* = Pml4Entry.new(&pdpt[0]);
+    }
+
+    const pdp: [*]PdptEntry = @ptrFromInt(pml4_ent.phys_pdpt << page_shift);
+    const pdp_ent = &pdp[pdp_index];
+    if (!pdp_ent.present) {
+        const pdt = try allocator.alloc(PdtEntry, num_table_entries);
+        pdp_ent.* = PdptEntry.new(@intFromPtr(pdt.ptr));
+    }
+
+    const pdt: [*]PdtEntry = @ptrFromInt(pdp_ent.phys_pdt << page_shift);
+    const pdt_ent = &pdt[pdt_index];
+    if (!pdt_ent.present) {
+        pdt_ent.* = PdtEntry.new_4mb(
+            pml4_index * 512 * page_size_1gb + pdp_index * page_size_1gb + pdt_index * page_size_2mb,
+        );
+    } else {
+        // TODO
+        @panic("The page is already mapped.");
+    }
 }
 
 /// Show the process of the address translation for the given linear address.

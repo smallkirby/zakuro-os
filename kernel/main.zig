@@ -205,6 +205,9 @@ fn main(
     const xhc_mmio_base = (@as(u64, bar1) << 32) | @as(u64, bar0 & ~@as(u32, 0b1111));
     log.info("xHC MMIO base: 0x{X}", .{xhc_mmio_base});
 
+    // TODO: identity map for MMIO base in case it exceeds 16GiB.
+    try arch.page.mapIdentity(xhc_mmio_base, allocator);
+
     // Initialize xHC controller.
     xhc = drivers.usb.xhc.Controller.new(xhc_mmio_base);
     try xhc.init();
