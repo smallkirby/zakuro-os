@@ -41,6 +41,7 @@ const am = @import("asm.zig");
 const gdt = @import("gdt.zig");
 const idt = @import("idt.zig");
 const isr = @import("isr.zig");
+const page = @import("page.zig");
 
 /// Context for interrupt handlers.
 pub const Context = isr.Context;
@@ -129,6 +130,7 @@ fn unhandledFaultHandler(context: *Context) void {
 
     const cr2 = am.readCr2();
     log.err("Fault Address: 0x{X:0>16}", .{cr2});
+    page.showPageTable(cr2);
     log.err("", .{});
     log.err("Common unhandled handler continues...", .{});
     log.err("", .{});

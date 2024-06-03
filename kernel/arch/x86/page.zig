@@ -1,3 +1,7 @@
+const std = @import("std");
+const log = std.log.scoped(.archp);
+const Allocator = std.mem.Allocator;
+
 const arch = @import("arch.zig");
 const am = @import("asm.zig");
 
@@ -49,6 +53,37 @@ pub fn initIdentityMapping() void {
 
     // Load CR3 register.
     am.loadCr3(@intFromPtr(&pml4_table[0]));
+}
+
+/// Show the process of the address translation for the given linear address.
+/// TODO: do not use logger of this scope.
+pub fn showPageTable(lin_addr: u64) void {
+    // TODO: remove magic numbers.
+    const pml4_index = (lin_addr >> 39) & 0x1FF;
+    const pdp_index = (lin_addr >> 30) & 0x1FF;
+    const pdt_index = (lin_addr >> 21) & 0x1FF;
+    const pt_index = (lin_addr >> 12) & 0x1FF;
+    log.err("Linear Address: 0x{X:0>16} (0x{X}, 0x{X}, 0x{X}, 0x{X})", .{
+        lin_addr,
+        pml4_index,
+        pdp_index,
+        pdt_index,
+        pt_index,
+    });
+
+    const cr3 = am.readCr3();
+    const pml4: [*]Pml4Entry = @ptrFromInt(cr3);
+    log.debug("PML4: 0x{X:0>16}", .{@intFromPtr(pml4)});
+    const pml4_entry = pml4[pml4_index];
+    log.debug("\tPML4[{d}]: 0x{X:0>16}", .{ pml4_index, std.mem.bytesAsValue(u64, &pml4_entry).* });
+    const pdp: [*]PdptEntry = @ptrFromInt(pml4_entry.phys_pdpt << page_shift);
+    log.debug("PDPT: 0x{X:0>16}", .{@intFromPtr(pdp)});
+    const pdp_entry = pdp[pdp_index];
+    log.debug("\tPDPT[{d}]: 0x{X:0>16}", .{ pdp_index, std.mem.bytesAsValue(u64, &pdp_entry).* });
+    const pdt: [*]PdtEntry = @ptrFromInt(pdp_entry.phys_pdt << page_shift);
+    log.debug("PDT: 0x{X:0>16}", .{@intFromPtr(pdt)});
+    const pdt_entry = pdt[pdt_index];
+    log.debug("\tPDT[{d}]: 0x{X:0>16}", .{ pdt_index, std.mem.bytesAsValue(u64, &pdt_entry).* });
 }
 
 /// PML4E
