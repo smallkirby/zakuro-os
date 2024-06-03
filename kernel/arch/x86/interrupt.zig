@@ -61,6 +61,8 @@ pub fn init() void {
         );
     }
 
+    registerHandler(pageFault, unhandledFaultHandler);
+
     idt.init();
 
     asm volatile ("sti");
@@ -119,6 +121,19 @@ fn unhandledHandler(context: *Context) void {
     log.err("SS: 0x{X:0>4}", .{context.ss});
 
     asm volatile ("hlt");
+}
+
+/// TODO: move to an appropriate place
+fn unhandledFaultHandler(context: *Context) void {
+    log.err("============ Unhandled Fault ===================", .{});
+
+    const cr2 = am.readCr2();
+    log.err("Fault Address: 0x{X:0>16}", .{cr2});
+    log.err("", .{});
+    log.err("Common unhandled handler continues...", .{});
+    log.err("", .{});
+
+    unhandledHandler(context);
 }
 
 const divideByZero = 0;
