@@ -17,15 +17,20 @@ const intr = zakuro.arch.intr;
 const FixedSizeQueue = zakuro.lib.queue.FixedSizeQueue;
 const mm = zakuro.mm;
 const MemoryMap = mm.uefi.MemoryMap;
+const BitmapPageAllocator = mm.BitmapPageAllocator;
 
 /// Override panic impl
 pub const panic = @import("panic.zig").panic_fn;
 /// Override log impl
 pub const std_options = klog.default_log_options;
 
-const kstack_size = arch.page_size * 0x30;
+const kstack_size = arch.page_size * 0x50;
 /// Kernel stack
 var kstack: [kstack_size]u8 align(16) = [_]u8{0} ** kstack_size;
+
+/// Buffer for BitmapPageAllocator.
+/// TODO: allocate memory dynamically
+var bpa_buf: [@sizeOf(BitmapPageAllocator)]u8 align(4096) = [_]u8{0} ** @sizeOf(BitmapPageAllocator);
 
 /// xHC controller.
 /// TODO: Move this to a proper place.
@@ -89,8 +94,6 @@ fn main(
     fb_config: *graphics.FrameBufferConfig,
     memory_map: *MemoryMap,
 ) !void {
-    _ = memory_map; // autofix
-
     const serial = ser.init();
     klog.init(serial);
 
@@ -104,6 +107,9 @@ fn main(
     // Initialize GDT
     arch.gdt.init();
     log.info("Initialized GDT.", .{});
+
+    // Initialize page allocator
+    _ = BitmapPageAllocator.init(memory_map, &bpa_buf);
 
     // Initialize paging.
     arch.page.initIdentityMapping();

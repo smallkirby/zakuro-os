@@ -79,10 +79,10 @@ pub const EfiMemoryType = enum(u32) {
     MaxMemoryType,
 
     /// Check if the memory type is available for general use by OS.
-    pub fn is_available(self: EfiMemoryType) bool {
+    pub fn isAvailable(self: EfiMemoryType) bool {
         return switch (self) {
-            .LoaderCode,
-            .LoaderData,
+            .BootServicesCode,
+            .BootServicesData,
             .ConventionalMemory,
             => true,
             else => false,
