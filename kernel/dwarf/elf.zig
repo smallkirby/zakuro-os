@@ -256,7 +256,7 @@ test "Can parse ELF header and shstrtab" {
     try testing.expectEqual(@offsetOf(ElfHeader.FixedHeader, "shnum"), 0x3C);
 
     const header = try ElfHeader.new(&bin);
-    try testing.expectEqual(header.fheader.shnum, 21);
+    try testing.expectEqual(header.fheader.shnum, 22);
 
     try testing.expect(std.mem.eql(u8, "", header.shstrtab.strtabAt(0).?));
     try testing.expect(std.mem.eql(u8, ".rodata", header.shstrtab.strtabAt(1).?));

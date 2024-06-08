@@ -175,7 +175,7 @@ pub const UsbDevice = struct {
     }
 
     /// Get the configuration descriptor and associated interface descriptors.
-    fn init_one(self: *Self, device_desc: *descs.DeviceDescriptor) !void {
+    fn init_one(self: *Self, device_desc: *align(8) descs.DeviceDescriptor) !void {
         if (self.phase != .Phase1) {
             return UsbDeviceError.InvalidPhase;
         }
@@ -194,7 +194,7 @@ pub const UsbDevice = struct {
 
     /// TODO: doc
     fn init_second(self: *Self, buf: []u8) !void {
-        const config_desc: *descs.ConfigurationDescriptor = @alignCast(@ptrCast(buf.ptr));
+        const config_desc: *align(8) descs.ConfigurationDescriptor = @alignCast(@ptrCast(buf.ptr));
         if (config_desc.descriptor_type != .Configuration) {
             return UsbDeviceError.InvalidDescriptor;
         }
@@ -355,7 +355,7 @@ pub const UsbDevice = struct {
             .NotAddressed => @panic("onControlComplete is called while the initialization has not started."),
             .Phase1 => {
                 if (buf) |b| {
-                    const desc: *descs.DeviceDescriptor = @alignCast(@ptrCast(b.ptr));
+                    const desc: *align(8) descs.DeviceDescriptor = @alignCast(@ptrCast(b.ptr));
                     if (desc.descriptor_type != .Device) return UsbDeviceError.InvalidDescriptor;
                     try self.init_one(desc);
                 } else {

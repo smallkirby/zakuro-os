@@ -48,7 +48,7 @@ pub fn build(b: *std.Build) void {
 
         const makefont_artifact = b.addRunArtifact(makefont);
         makefont_artifact.addArg("--input");
-        makefont_artifact.addFileArg(.{ .path = "./tools/fonts/half.txt" });
+        makefont_artifact.addFileArg(b.path("./tools/fonts/half.txt"));
         makefont_artifact.addArg("--output");
         makefont_output = makefont_artifact.addOutputFileArg("font.o");
         makefont_artifact.step.dependOn(&makefont.step);

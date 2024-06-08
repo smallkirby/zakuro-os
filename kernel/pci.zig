@@ -351,7 +351,7 @@ pub const DeviceInfo = struct {
         );
 
         var buf: [4]u32 align(8) = [_]u32{0} ** 4;
-        const msi_cap: *msi.CapabilityRegister = @constCast(@ptrCast(&buf));
+        const msi_cap: *msi.CapabilityRegister = @alignCast(@constCast(@ptrCast(&buf)));
         // Read the MSI capability register.
         for (0..4) |i| {
             buf[i] = self.device.readDataArb(

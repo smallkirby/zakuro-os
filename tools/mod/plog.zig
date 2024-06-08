@@ -24,8 +24,8 @@ pub fn logFunc(
         .err => ch_err,
     };
 
-    std.debug.getStderrMutex().lock();
-    defer std.debug.getStderrMutex().unlock();
+    std.debug.lockStdErr();
+    defer std.debug.unlockStdErr();
     const stderr = std.io.getStdErr().writer();
     nosuspend stderr.print(ch.fmt(prefix) ++ " " ++ format ++ "\n", args) catch return;
 }
