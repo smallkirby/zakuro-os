@@ -1,5 +1,3 @@
-//! TODO
-
 const std = @import("std");
 const zakuro = @import("zakuro");
 const log = std.log.scoped(.pci);
@@ -9,10 +7,8 @@ const msi = zakuro.arch.msi;
 /// Maximum number of PCI devices that can be registered.
 const max_device_num: usize = 256;
 /// List of registered PCI devices.
-/// TODO: Remove this global variable and use a dynamically allocated memory.
 pub var devices: [max_device_num]?DeviceInfo = [_]?DeviceInfo{null} ** max_device_num;
 /// Number of registered PCI devices.
-/// TODO: Remove this global variable and use a dynamically allocated memory.
 pub var num_devices: usize = 0;
 
 /// I/O port for configuration address.
@@ -437,7 +433,6 @@ fn registerBus(bus: u8) PciError!void {
 /// The second is a recursive scan that finds available buses while scanning.
 /// The last one is similar to the second, but configures registers while scanning.
 /// This function uses the second method.
-/// TODO: After kheap allocator is implemented, we should dynamically allocate memory for the device list.
 pub fn registerAllDevices() PciError!void {
     // Clear the device list.
     num_devices = 0;
