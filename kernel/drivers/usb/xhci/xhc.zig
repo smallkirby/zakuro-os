@@ -605,7 +605,7 @@ test "xHC Controller Register Access" {
     const runtime_regs: *volatile Regs.RuntimeRegisters = @ptrFromInt(base + capability_regs.rtsoff & ~@as(u64, 0b11111));
 
     // Test register addresses
-    var hc = Controller.new(@intFromPtr(memory.ptr));
+    var hc = Controller.new(@intFromPtr(memory.ptr), allocator);
     try expectEqual(capability_regs, hc.capability_regs);
     try expectEqual(operational_regs, hc.operational_regs);
     try expectEqual(runtime_regs, hc.runtime_regs);
