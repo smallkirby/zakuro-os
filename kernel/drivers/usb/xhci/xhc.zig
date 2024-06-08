@@ -1,8 +1,10 @@
 //! This module provides a xHC (Entended Host Controller) driver.
 
 const std = @import("std");
-const zakuro = @import("zakuro");
+const Allocator = std.mem.Allocator;
 const log = std.log.scoped(.xhci);
+
+const zakuro = @import("zakuro");
 const arch = zakuro.arch;
 const context = @import("context.zig");
 const ring = @import("ring.zig");
@@ -33,12 +35,6 @@ pub const XhcError = error{
 /// Maximum number of device slots supported by this driver.
 const num_device_slots = 8;
 
-/// Buffer used by fixed-size allocator.
-/// TODO: use kernel allocator whin it's ready.
-var general_buf = [_]u8{0} ** (4096 * 30);
-/// TODO: use kernel allocator whin it's ready.
-var fsa = std.heap.FixedBufferAllocator.init(&general_buf);
-
 /// xHC Host Controller
 pub const Controller = struct {
     /// MMIO base of the HC.
@@ -57,7 +53,6 @@ pub const Controller = struct {
     dev_controller: DevController,
 
     /// Fixed-size allocator.
-    /// TODO: use kernel allocator when it's ready.
     allocator: std.mem.Allocator,
 
     /// Comamnd Ring.
@@ -73,7 +68,7 @@ pub const Controller = struct {
     const Self = @This();
 
     /// Instantiate new handler of the xHC.
-    pub fn new(mmio_base: u64) Self {
+    pub fn new(mmio_base: u64, allocator: Allocator) Self {
         // Calculate the address of the registers.
         const capability_regs: *volatile Regs.CapabilityRegisters = @ptrFromInt(mmio_base);
         const operational_regs: *volatile Regs.OperationalRegisters = @ptrFromInt(mmio_base + capability_regs.cap_length);
@@ -83,8 +78,6 @@ pub const Controller = struct {
         log.debug("xHC Operational Registers @ {X:0>16}", .{@intFromPtr(operational_regs)});
         log.debug("xHC Runtime Registers @ {X:0>16}", .{@intFromPtr(runtime_regs)});
         log.debug("xHC Doorbell Registers @ {X:0>16}", .{@intFromPtr(doorbell_regs)});
-
-        const allocator = fsa.allocator();
 
         // Init device controlle
         const dev_controller = DevController.new(8, allocator) catch |err| {

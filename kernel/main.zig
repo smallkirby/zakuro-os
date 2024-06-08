@@ -206,7 +206,7 @@ fn main(
     try arch.page.mapIdentity(xhc_mmio_base, allocator);
 
     // Initialize xHC controller.
-    xhc = drivers.usb.xhc.Controller.new(xhc_mmio_base);
+    xhc = drivers.usb.xhc.Controller.new(xhc_mmio_base, allocator);
     try xhc.init();
     xhc.run();
     log.info("Started xHC controller.", .{});
