@@ -18,3 +18,8 @@ const page_size = arch.page_size;
 pub inline fn phys2pfn(phys: u64) Pfn {
     return phys / page_size;
 }
+
+/// Converts the page frame number to the physical address in the flat model.
+pub inline fn pfn2phys(pfn: Pfn) u64 {
+    return pfn * page_size;
+}

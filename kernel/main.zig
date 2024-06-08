@@ -109,14 +109,11 @@ fn main(
     log.info("Initialized GDT.", .{});
 
     // Initialize page allocator
-    _ = BitmapPageAllocator.init(memory_map, &bpa_buf);
+    var bpa = BitmapPageAllocator.init(memory_map, &bpa_buf);
+    const allocator = bpa.allocator();
 
     // Initialize paging.
     arch.page.initIdentityMapping();
-
-    // Initialize FSA
-    // TODO: Use kernel allocator when it's ready.
-    const allocator = fsa.allocator();
 
     // Initialize interrupt queue
     intr_queue = try FixedSizeQueue(IntrMessage).init(16, allocator);

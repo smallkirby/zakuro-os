@@ -13,6 +13,8 @@ const am = @import("asm.zig");
 pub const page_size: usize = 4096;
 /// Page shift in bits.
 pub const page_shift: usize = 12;
+/// Page mask.
+pub const page_mask: usize = page_size - 1;
 
 /// Pause a CPU for a short period of time.
 pub fn relax() void {

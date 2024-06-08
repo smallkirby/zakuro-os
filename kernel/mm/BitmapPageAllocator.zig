@@ -2,6 +2,7 @@
 
 const std = @import("std");
 const log = std.log.scoped(.bpa);
+const Allocator = std.mem.Allocator;
 
 const zakuro = @import("zakuro");
 const arch = zakuro.arch;
@@ -89,8 +90,67 @@ pub fn init(map: *MemoryMap, buffer: []u8) *Self {
         }
     }
     log.info("Available memory size: {d} MiB", .{count_pages * page_size / 1024 / 1024});
+    log.info("Available Memory Range: 0x{X:0>16} - 0x{X:0>16}", .{
+        self.start_pfn * page_size,
+        self.end_pfn * page_size,
+    });
 
     return self;
+}
+
+/// Instantiate an allocator.
+pub fn allocator(self: *Self) Allocator {
+    return Allocator{
+        .ptr = self,
+        .vtable = &.{
+            .alloc = alloc,
+            .resize = resize,
+            .free = free,
+        },
+    };
+}
+
+/// Allocate a heap memory in page granularity.
+fn alloc(ctx: *anyopaque, n: usize, _: u8, _: usize) ?[*]u8 {
+    const self: *Self = @alignCast(@ptrCast(ctx));
+    const num_pages = (n + page_size - 1) / page_size;
+    const pfn = self.getAdjacentPages(num_pages) orelse return null;
+    for (0..num_pages) |i| {
+        self.set(pfn + i, .Unusable);
+    }
+
+    return @ptrFromInt(page.pfn2phys(pfn));
+}
+
+/// Not implemented.
+fn resize(
+    _: *anyopaque,
+    _: []u8,
+    _: u8,
+    _: usize,
+    _: usize,
+) bool {
+    @setCold(true);
+    @panic("BitmapPageAllocator: resize is not supported");
+}
+
+/// Free the memory allocated by the allocator.
+fn free(
+    ctx: *anyopaque,
+    buf: []u8,
+    _: u8,
+    _: usize,
+) void {
+    const self: *Self = @alignCast(@ptrCast(ctx));
+    if (@intFromPtr(buf.ptr) & arch.page_mask != 0) {
+        @panic("BitmapPageAllocator: free: buf is not page aligned");
+    }
+
+    const num_pages = buf.len / page_size;
+    const pfn = page.phys2pfn(@intFromPtr(buf.ptr));
+    for (0..num_pages) |i| {
+        self.set(pfn + i, .Usable);
+    }
 }
 
 /// Mark the given range of physical pages as usable or unusable.
@@ -113,6 +173,26 @@ inline fn set(self: *Self, pfn: Pfn, state: PageState) void {
     } else {
         self.bitmap[pfn / frames_per_byte] |= @as(u8, 1) << @as(u3, @truncate(pfn % frames_per_byte));
     }
+}
+
+/// Get the adjacent usable pages.
+/// Returns the first PFN of the adjacent pages.
+fn getAdjacentPages(self: *Self, n: usize) ?Pfn {
+    if (n == 0) return null;
+
+    var pos_pfn = self.start_pfn;
+    var cont_count: usize = 0;
+
+    while (pos_pfn < self.end_pfn) : (pos_pfn += 1) {
+        if (self.get(pos_pfn) == .Usable) {
+            cont_count += 1;
+        }
+        if (cont_count == n) {
+            return pos_pfn - n + 1;
+        }
+    }
+
+    return null;
 }
 
 const PageState = enum(u1) {
