@@ -11,41 +11,47 @@ const page_size_1gb: usize = page_size_2mb << 9;
 const page_shift = arch.page_shift;
 const num_table_entries: usize = 512;
 
-/// 1st level page table.
-/// TODO: Do not statically allocate these.
-/// TODO: Do not do identity mapping.
-var pml4_table: [num_table_entries]Pml4Entry align(page_size_4k) = [_]Pml4Entry{
-    Pml4Entry.new_nopresent(),
-} ** num_table_entries;
-/// 2nd level page table.
-var pdp_table: [num_table_entries]PdptEntry align(page_size_4k) = [_]PdptEntry{
-    PdptEntry.new_nopresent(),
-} ** num_table_entries;
-
-const PageDirectory = [num_table_entries]PdtEntry;
-/// 3rd level page table.
-/// TODO: For now, we use identity mapping only. So we only need 3 levels of page tables.
-///     In the identity mapping, each page table entry maps 1GiB of memory.
-var page_direcotry: [num_table_entries]PageDirectory align(page_size_4k) = [_]PageDirectory{
-    [_]PdtEntry{
-        PdtEntry.new_nopresent(),
-    } ** num_table_entries,
-} ** num_table_entries;
+pub const PageError = error{
+    /// Failed to allocate memory.
+    NoMemory,
+};
 
 /// Construct the identity mapping and switch to it.
 /// This function uses 2MiB pages to reduce the number of page table entries.
 /// Only the first entry of the PML4 table is used.
 /// TODO: This is a temporary implementation. Replace it.
-pub fn initIdentityMapping() void {
+pub fn initIdentityMapping(allocator: Allocator) PageError!void {
+    // Allocate and init tables.
+    const pml4_table = allocator.alloc(Pml4Entry, num_table_entries) catch {
+        return PageError.NoMemory;
+    };
+    errdefer allocator.free(pml4_table);
+    for (0..num_table_entries) |i| {
+        pml4_table[i] = Pml4Entry.new_nopresent();
+    }
+
+    const pdp_table = allocator.alloc(PdptEntry, num_table_entries) catch {
+        return PageError.NoMemory;
+    };
+    errdefer allocator.free(pdp_table);
+    for (0..num_table_entries) |i| {
+        pdp_table[i] = PdptEntry.new_nopresent();
+    }
+
     // Construct PML4 table.
     pml4_table[0] = Pml4Entry.new(&pdp_table[0]);
 
     // Construct PDPT table and 2MiB PDT entries.
     for (0..num_table_entries) |pdp_i| {
-        pdp_table[pdp_i] = PdptEntry.new(@intFromPtr(&page_direcotry[pdp_i]));
+        const page_directory = allocator.alloc(PdtEntry, num_table_entries) catch {
+            return PageError.NoMemory;
+        };
+        errdefer allocator.free(page_directory);
+
+        pdp_table[pdp_i] = PdptEntry.new(@intFromPtr(page_directory.ptr));
 
         for (0..num_table_entries) |pdt_i| {
-            page_direcotry[pdp_i][pdt_i] = PdtEntry.new_4mb(
+            page_directory[pdt_i] = PdtEntry.new_4mb(
                 pdp_i * page_size_1gb + pdt_i * page_size_2mb,
             );
         }
@@ -63,6 +69,8 @@ pub fn mapIdentity(vaddr: u64, allocator: Allocator) !void {
     const pml4_index = (vaddr >> 39) & 0x1FF;
     const pdp_index = (vaddr >> 30) & 0x1FF;
     const pdt_index = (vaddr >> 21) & 0x1FF;
+
+    const pml4_table = getCurrentPml4();
 
     const pml4_ent = &pml4_table[pml4_index];
     if (!pml4_ent.present) {
@@ -87,6 +95,12 @@ pub fn mapIdentity(vaddr: u64, allocator: Allocator) !void {
         // TODO
         @panic("The page is already mapped.");
     }
+}
+
+/// Get the pointer to the PML4 table of the current CPU.
+fn getCurrentPml4() [*]Pml4Entry {
+    const cr3 = am.readCr3();
+    return @ptrFromInt(cr3 & ~@as(u64, 0xFFF));
 }
 
 /// Show the process of the address translation for the given linear address.

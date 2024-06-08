@@ -107,7 +107,7 @@ fn main(
     const allocator = bpa.allocator();
 
     // Initialize paging.
-    arch.page.initIdentityMapping();
+    try arch.page.initIdentityMapping(allocator);
 
     // Initialize interrupt queue
     intr_queue = try FixedSizeQueue(IntrMessage).init(16, allocator);
