@@ -39,12 +39,6 @@ var xhc: drivers.usb.xhc.Controller = undefined;
 /// TODO: Move this to a proper place.
 var intr_queue: FixedSizeQueue(IntrMessage) = undefined;
 
-/// Buffer used by fixed-size allocator.
-/// TODO: use kernel allocator whin it's ready.
-var general_buf = [_]u8{0} ** (4096 * 3);
-/// TODO: use kernel allocator whin it's ready.
-var fsa = std.heap.FixedBufferAllocator.init(&general_buf);
-
 /// Interrupt message.
 /// The message is queued in the interrupt handler and processed in the main loop.
 /// TODO: Move this to a proper place.
