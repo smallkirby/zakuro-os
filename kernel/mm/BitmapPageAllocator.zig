@@ -177,7 +177,7 @@ inline fn set(self: *Self, pfn: Pfn, state: PageState) void {
 
 /// Get the adjacent usable pages.
 /// Returns the first PFN of the adjacent pages.
-fn getAdjacentPages(self: *Self, n: usize) ?Pfn {
+pub fn getAdjacentPages(self: *Self, n: usize) ?Pfn {
     if (n == 0) return null;
 
     var pos_pfn = self.start_pfn;

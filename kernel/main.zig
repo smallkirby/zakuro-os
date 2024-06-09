@@ -18,6 +18,7 @@ const FixedSizeQueue = zakuro.lib.queue.FixedSizeQueue;
 const mm = zakuro.mm;
 const MemoryMap = mm.uefi.MemoryMap;
 const BitmapPageAllocator = mm.BitmapPageAllocator;
+const SlubAllocator = mm.SlubAllocator;
 
 /// Override panic impl
 pub const panic = @import("panic.zig").panic_fn;
