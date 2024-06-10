@@ -11,7 +11,7 @@ const zakuro = @import("zakuro");
 const arch = zakuro.arch;
 const page_size = arch.page_size;
 const page = @import("page.zig");
-const BitmapPageAllocator = @import("BitmapPageAllocator.zig");
+const BitmapPageAllocator = if (!@import("builtin").is_test) @import("BitmapPageAllocator.zig") else MockedPageAllocator;
 
 pub const KAllocator = @This();
 const Self = KAllocator;
@@ -123,6 +123,95 @@ const PageData = packed struct {
     addr: va,
 };
 
+/// Dedicated allocator for page structure under the environment
+/// where only page allocator is available.
+/// This allocator requests an entire page from the page allocator
+/// and uses it to allocate page structures.
+/// If the page is full, it requests another page.
+/// When the page releases all structures,
+/// it returns the page to the page allocator.
+/// The allocated page is split into objects.
+/// When the object is not used, they contains the pointer to the next object.
+const PageCache = struct {
+    const Node = PageList.Node;
+    const EmptyNode = packed struct {
+        next: ?*EmptyNode,
+    };
+
+    /// Size of the page struct.
+    const node_size: usize = @sizeOf(Node);
+    /// Number of page struct that can be allocated in a page.
+    const node_per_page: usize = page_size / node_size;
+
+    /// Page allocator.
+    pa: *BitmapPageAllocator,
+    /// Total number of allocated pages.
+    num_pages: usize = 0,
+    /// Total number of allocated objects.
+    num_objects: usize = 0,
+    /// Current active page.
+    current_page: va,
+    /// Page struct that will be allocated next.
+    freelist: ?*EmptyNode = null,
+
+    /// Instantiate the page cache.
+    pub fn init(pa: *BitmapPageAllocator) Error!PageCache {
+        const cache_pfn = pa.getAdjacentPages(1) orelse return Error.MetadataNoMemory;
+        var ret = PageCache{
+            .pa = pa,
+            .current_page = page.pfn2phys(cache_pfn),
+            .freelist = null,
+        };
+
+        ret.initPage(ret.current_page);
+
+        return ret;
+    }
+
+    /// Allocate a page structure.
+    pub fn allocPageStruct(self: *PageCache) Error!*Node {
+        try self.mayAllocNewPage();
+
+        const ret = self.freelist.?;
+        self.freelist = ret.next;
+        self.num_objects += 1;
+
+        return @ptrCast(ret);
+    }
+
+    /// Free a page structure.
+    pub fn freePageStruct(self: *PageCache, node: *Node) Error!void {
+        const empty_node: *EmptyNode = @ptrCast(node);
+        empty_node.next = self.freelist orelse @ptrFromInt(0);
+        self.freelist = empty_node;
+        self.num_objects -= 1;
+
+        // TODO: If the page is empty, return it to the page allocator.
+    }
+
+    /// If no more objects can allocate, get a new page.
+    /// Otherwise, do nothing.
+    fn mayAllocNewPage(self: *PageCache) Error!void {
+        if (self.num_pages * node_per_page == self.num_objects) {
+            const new_page = self.pa.getAdjacentPages(1) orelse return Error.MetadataNoMemory;
+            self.initPage(page.pfn2phys(new_page));
+        }
+    }
+
+    /// Initiate a new page to fill it with empty node list.
+    /// Feeds the freelist with the new empty nodes.
+    fn initPage(self: *PageCache, cache: va) void {
+        const ptr: [*]Node = @ptrFromInt(cache);
+        for (0..node_per_page) |i| {
+            const empty_node: *EmptyNode = @ptrCast(&ptr[i]);
+            empty_node.next = self.freelist orelse @ptrFromInt(0);
+            self.freelist = empty_node;
+        }
+
+        self.num_pages += 1;
+    }
+};
+
 /// Single slub of the size.
 const Slub = struct {
     /// The size of objects this slub can hold.
@@ -200,6 +289,84 @@ test "wrapsMemorySize" {
     try testing.expectEqual(null, get(4097));
 }
 
-test {
-    testing.refAllDecls(@This());
+const MockedPageAllocator = struct {
+    pub fn getAdjacentPages(_: *MockedPageAllocator, n: usize) ?page.Pfn {
+        if (n == 0) return null;
+
+        const ret = std.c.mmap(
+            null,
+            page_size * n,
+            std.os.linux.PROT.READ | std.os.linux.PROT.WRITE,
+            .{
+                .TYPE = std.os.linux.MAP_TYPE.PRIVATE,
+                .ANONYMOUS = true,
+            },
+            -1,
+            0,
+        );
+        return page.phys2pfn(@intFromPtr(ret));
+    }
+};
+
+test "Initial state of slubs" {
+    var page_allocator = MockedPageAllocator{};
+    const arena = try Arena.init(&page_allocator);
+    for (arena.slubs) |slub| {
+        try testing.expectEqual(slub.active_page & arch.page_mask, 0);
+        try testing.expectEqual(slub.freelist.len, 0);
+        try testing.expectEqual(slub.pagelist.len, 0);
+    }
+}
+
+test "PageCache init" {
+    var page_allocator = MockedPageAllocator{};
+    const page_cache = try PageCache.init(&page_allocator);
+
+    try testing.expectEqual(1, page_cache.num_pages);
+    try testing.expectEqual(0, page_cache.num_objects);
+
+    const freelist = page_cache.freelist;
+    const node_size = PageCache.node_size;
+    try testing.expectEqual(0x18, node_size);
+    try testing.expectEqual(node_size, @intFromPtr(freelist.?) - @intFromPtr(freelist.?.next));
+
+    var len: usize = 0;
+    var p: ?*PageCache.EmptyNode = freelist;
+    while (p != null) : (p = p.?.next) {
+        len += 1;
+    }
+    try testing.expectEqual(PageCache.node_per_page, len);
+}
+
+test "PageCache Alloc/Free" {
+    var page_allocator = MockedPageAllocator{};
+    var page_cache = try PageCache.init(&page_allocator);
+    var nodes = [_]*PageCache.Node{undefined} ** PageCache.node_per_page;
+
+    // Alloc
+    for (0..PageCache.node_per_page) |i| {
+        nodes[i] = try page_cache.allocPageStruct();
+    }
+    try testing.expectEqual(1, page_cache.num_pages);
+    try testing.expectEqual(PageCache.node_per_page, page_cache.num_objects);
+
+    const lastone = try page_cache.allocPageStruct();
+    try testing.expectEqual(2, page_cache.num_pages);
+    try testing.expectEqual(PageCache.node_per_page + 1, page_cache.num_objects);
+
+    // Free
+    try page_cache.freePageStruct(lastone);
+    try testing.expectEqual(PageCache.node_per_page, page_cache.num_objects);
+
+    for (0..PageCache.node_per_page) |i| {
+        try page_cache.freePageStruct(nodes[i]);
+    }
+    try testing.expectEqual(0, page_cache.num_objects);
+
+    var len: usize = 0;
+    var p: ?*PageCache.EmptyNode = page_cache.freelist;
+    while (p != null) : (p = p.?.next) {
+        len += 1;
+    }
+    try testing.expectEqual(PageCache.node_per_page * 2, len);
 }

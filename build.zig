@@ -203,6 +203,7 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("kernel/zakuro.zig"),
             .target = target,
             .optimize = optimize,
+            .link_libc = true,
         });
         zakuro_unit_tests.root_module.addImport("zakuro", &zakuro_unit_tests.root_module);
         zakuro_unit_tests.addObjectFile(makefont_output);
