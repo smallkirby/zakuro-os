@@ -13,8 +13,8 @@ const page_size = arch.page_size;
 const page = @import("page.zig");
 const BitmapPageAllocator = if (!@import("builtin").is_test) @import("BitmapPageAllocator.zig") else MockedPageAllocator;
 
-pub const KAllocator = @This();
-const Self = KAllocator;
+pub const SlubAllocator = @This();
+const Self = SlubAllocator;
 
 pub const SlubAllocatorError = Error;
 const Error = error{
@@ -102,15 +102,21 @@ fn slubsize2index(size: usize) usize {
 const Arena = struct {
     /// Slubs of each size.
     slubs: [slub_sizes.len]Slub,
+    /// Page cache for the slub allocators.
+    page_cache: PageCache,
 
+    /// Instantiate the arena.
     pub fn init(bpa: *BitmapPageAllocator) Error!Arena {
+        var page_cache = try PageCache.init(bpa);
         var slubs: [slub_sizes.len]Slub = undefined;
         for (slub_sizes) |size| {
             const index = slubsize2index(size);
-            slubs[index] = try Slub.init(size, bpa);
+            slubs[index] = try Slub.init(size, &page_cache, bpa);
         }
+
         return Arena{
             .slubs = slubs,
+            .page_cache = page_cache,
         };
     }
 };
@@ -121,6 +127,8 @@ const PageList = std.DoublyLinkedList(PageData);
 const PageData = packed struct {
     /// The start address of the page.
     addr: va,
+    /// Pointer to the first element of the free slub object.
+    freelist: va,
 };
 
 /// Dedicated allocator for page structure under the environment
@@ -149,8 +157,6 @@ const PageCache = struct {
     num_pages: usize = 0,
     /// Total number of allocated objects.
     num_objects: usize = 0,
-    /// Current active page.
-    current_page: va,
     /// Page struct that will be allocated next.
     freelist: ?*EmptyNode = null,
 
@@ -159,11 +165,10 @@ const PageCache = struct {
         const cache_pfn = pa.getAdjacentPages(1) orelse return Error.MetadataNoMemory;
         var ret = PageCache{
             .pa = pa,
-            .current_page = page.pfn2phys(cache_pfn),
             .freelist = null,
         };
 
-        ret.initPage(ret.current_page);
+        ret.initPage(page.pfn2phys(cache_pfn));
 
         return ret;
     }
@@ -176,7 +181,7 @@ const PageCache = struct {
         self.freelist = ret.next;
         self.num_objects += 1;
 
-        return @ptrCast(ret);
+        return @alignCast(@ptrCast(ret));
     }
 
     /// Free a page structure.
@@ -214,26 +219,57 @@ const PageCache = struct {
 
 /// Single slub of the size.
 const Slub = struct {
+    const EmptyNode = packed struct {
+        next: ?*EmptyNode,
+    };
+
     /// The size of objects this slub can hold.
     size: usize,
+    /// Number of objects that can be allocated in a page.
+    objects_per_page: usize,
+
     /// Active page that can allocate at least one object.
-    active_page: va,
+    active_page: *PageList.Node,
+    /// List of pages that are not full excluding active_page.
+    list_freepage: PageList,
     /// List of pages that are full.
-    freelist: PageList,
-    /// List of pages that are not full.
-    pagelist: PageList,
+    list_fullpage: PageList,
+    /// Total number of allocated objects.
+    num_objects: usize = 0,
+    /// Total number of allocated pages.
+    num_pages: usize = 0,
 
     /// Instantiate
-    pub fn init(size: usize, bpa: *BitmapPageAllocator) Error!Slub {
-        const first_page = bpa.getAdjacentPages(1) orelse {
+    pub fn init(size: usize, page_cache: *PageCache, bpa: *BitmapPageAllocator) Error!Slub {
+        const first_page_pfn = bpa.getAdjacentPages(1) orelse {
             return Error.NoMemory;
         };
-        return Slub{
+
+        var slub = Slub{
             .size = size,
-            .active_page = page.pfn2phys(first_page),
-            .freelist = .{},
-            .pagelist = .{},
+            .objects_per_page = page_size / size,
+            .active_page = undefined,
+            .list_freepage = .{},
+            .list_fullpage = .{},
+            .num_pages = 1,
         };
+        slub.active_page = try slub.initPageObjects(page.pfn2phys(first_page_pfn), page_cache);
+
+        return slub;
+    }
+
+    /// Initiate new page with empty nodes.
+    fn initPageObjects(self: *Slub, slub_page: va, page_cache: *PageCache) Error!*PageList.Node {
+        const pagedata = try page_cache.allocPageStruct();
+        pagedata.data.addr = slub_page;
+
+        for (0..self.objects_per_page) |i| {
+            const empty_node: *EmptyNode = @ptrFromInt(slub_page + i * self.size);
+            empty_node.next = if (pagedata.data.freelist == 0) null else @ptrFromInt(pagedata.data.freelist);
+            pagedata.data.freelist = @intFromPtr(empty_node);
+        }
+
+        return pagedata;
     }
 };
 
@@ -312,10 +348,31 @@ test "Initial state of slubs" {
     var page_allocator = MockedPageAllocator{};
     const arena = try Arena.init(&page_allocator);
     for (arena.slubs) |slub| {
-        try testing.expectEqual(slub.active_page & arch.page_mask, 0);
-        try testing.expectEqual(slub.freelist.len, 0);
-        try testing.expectEqual(slub.pagelist.len, 0);
+        try testing.expectEqual(slub.active_page.data.addr & arch.page_mask, 0);
+        try testing.expectEqual(slub.list_freepage.len, 0);
+        try testing.expectEqual(slub.list_fullpage.len, 0);
     }
+
+    const slub8 = &arena.slubs[0];
+    try testing.expectEqual(slub8.objects_per_page, page_size / 8);
+    try testing.expectEqual(slub8.num_pages, 1);
+    try testing.expectEqual(slub8.num_objects, 0);
+    const freelist = slub8.active_page.data.freelist;
+    var len: usize = 0;
+    var p: ?*Slub.EmptyNode = @ptrFromInt(freelist);
+    while (p != null) : (p = p.?.next) {
+        len += 1;
+    }
+    try testing.expectEqual(slub8.objects_per_page, len);
+
+    const slub256 = &arena.slubs[7];
+    const freelist256 = slub256.active_page.data.freelist;
+    len = 0;
+    p = @ptrFromInt(freelist256);
+    while (p != null) : (p = p.?.next) {
+        len += 1;
+    }
+    try testing.expectEqual(slub256.objects_per_page, len);
 }
 
 test "PageCache init" {
@@ -327,7 +384,7 @@ test "PageCache init" {
 
     const freelist = page_cache.freelist;
     const node_size = PageCache.node_size;
-    try testing.expectEqual(0x18, node_size);
+    try testing.expectEqual(0x20, node_size);
     try testing.expectEqual(node_size, @intFromPtr(freelist.?) - @intFromPtr(freelist.?.next));
 
     var len: usize = 0;
