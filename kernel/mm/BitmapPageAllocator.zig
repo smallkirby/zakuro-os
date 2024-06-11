@@ -188,7 +188,11 @@ pub fn getAdjacentPages(self: *Self, n: usize) ?Pfn {
             cont_count += 1;
         }
         if (cont_count == n) {
-            return pos_pfn - n + 1;
+            const ret_pfn = pos_pfn - n + 1;
+            for (0..n) |i| {
+                self.set(ret_pfn + i, .Unusable);
+            }
+            return ret_pfn;
         }
     }
 

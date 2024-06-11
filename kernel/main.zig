@@ -105,13 +105,15 @@ fn main(
 
     // Initialize page allocator
     var bpa = BitmapPageAllocator.init(memory_map, &bpa_buf);
-    const allocator = bpa.allocator();
+    const page_allocator = bpa.allocator();
+    var slub_allocator = try SlubAllocator.init(bpa);
+    const gpa = slub_allocator.allocator();
 
     // Initialize paging.
-    try arch.page.initIdentityMapping(allocator);
+    try arch.page.initIdentityMapping(page_allocator);
 
     // Initialize interrupt queue
-    intr_queue = try FixedSizeQueue(IntrMessage).init(16, allocator);
+    intr_queue = try FixedSizeQueue(IntrMessage).init(16, gpa);
 
     // Initialize graphic console
     const pixel_writer = graphics.PixelWriter.new(fb_config);
@@ -204,10 +206,10 @@ fn main(
     log.info("xHC MMIO base: 0x{X}", .{xhc_mmio_base});
 
     // TODO: identity map for MMIO base in case it exceeds 16GiB.
-    try arch.page.mapIdentity(xhc_mmio_base, allocator);
+    try arch.page.mapIdentity(xhc_mmio_base, gpa);
 
     // Initialize xHC controller.
-    xhc = drivers.usb.xhc.Controller.new(xhc_mmio_base, allocator);
+    xhc = drivers.usb.xhc.Controller.new(xhc_mmio_base, gpa);
     try xhc.init();
     xhc.run();
     log.info("Started xHC controller.", .{});

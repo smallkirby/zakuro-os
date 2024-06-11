@@ -191,14 +191,6 @@ pub fn build(b: *std.Build) void {
 
     // Declare a test step.
     {
-        const root_unit_tests = b.addTest(.{
-            .root_source_file = b.path("kernel/main.zig"),
-            .target = target,
-            .optimize = optimize,
-        });
-        root_unit_tests.addObjectFile(makefont_output);
-        root_unit_tests.root_module.addImport("zakuro", zakuro);
-
         const zakuro_unit_tests = b.addTest(.{
             .root_source_file = b.path("kernel/zakuro.zig"),
             .target = target,
@@ -208,21 +200,16 @@ pub fn build(b: *std.Build) void {
         zakuro_unit_tests.root_module.addImport("zakuro", &zakuro_unit_tests.root_module);
         zakuro_unit_tests.addObjectFile(makefont_output);
 
-        const run_exe_unit_tests = b.addRunArtifact(root_unit_tests);
         const run_zakuro_unit_tests = b.addRunArtifact(zakuro_unit_tests);
         const test_step = b.step("test", "Run unit tests");
-        test_step.dependOn(&run_exe_unit_tests.step);
         test_step.dependOn(&run_zakuro_unit_tests.step);
 
         // Add a embed files
         {
-            root_unit_tests.root_module.addAnonymousImport("dwarf-elf", .{
-                .root_source_file = b.path(dwarf_example_out),
-            });
             zakuro_unit_tests.root_module.addAnonymousImport("dwarf-elf", .{
                 .root_source_file = b.path(dwarf_example_out),
             });
-            root_unit_tests.step.dependOn(&dwarf_install.step);
+            zakuro_unit_tests.step.dependOn(&dwarf_install.step);
             zakuro_unit_tests.step.dependOn(&dwarf_exe.step);
         }
     }
