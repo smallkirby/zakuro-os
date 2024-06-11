@@ -80,18 +80,20 @@ fn resize(
 fn free(
     ctx: *anyopaque,
     buf: []u8,
-    _: u8,
+    log2_align: u8,
     _: usize,
 ) void {
     const self: *Self = @alignCast(@ptrCast(ctx));
     const len = buf.len;
+    const ptr_align = @as(usize, 1) << @as(Allocator.Log2Align, @intCast(log2_align));
+    const aligned_len = if (len % ptr_align == 0) len else len + ptr_align - (len % ptr_align);
 
-    if (wrapsMemorySize(len) catch unreachable) |slub_size| {
+    if (wrapsMemorySize(aligned_len) catch unreachable) |slub_size| {
         const slub_index = slubsize2index(slub_size).?;
         const slub = &self.arena.slubs[slub_index];
         return slub.free(buf.ptr) catch {};
     } else {
-        const num_page = (len + page_size - 1) / page_size;
+        const num_page = (aligned_len + page_size - 1) / page_size;
         self.bpa.returnAdjacentPages(page.phys2pfn(@intFromPtr(buf.ptr)), num_page);
     }
 }
