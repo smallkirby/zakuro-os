@@ -105,7 +105,7 @@ fn free(
 }
 
 /// Virtual address.
-const va = u64;
+const VA = u64;
 
 /// Sizes of the slubs.
 const slub_sizes = [_]usize{ 8, 16, 32, 64, 96, 128, 192, 256, 512, 1024, 2048, 4096 };
@@ -157,10 +157,10 @@ const PageList = std.DoublyLinkedList(PageData);
 /// Slub manages caches using this struct.
 const PageData = packed struct {
     /// The start address of the page.
-    addr: va,
+    addr: VA,
     /// Pointer to the first element of the free slub object.
     /// If the page is full, this is zero.
-    freelist: va,
+    freelist: VA,
 };
 
 /// Dedicated allocator for page structure under the environment
@@ -237,7 +237,7 @@ const PageStructCache = struct {
 
     /// Initiate a new page to fill it with empty node list.
     /// Feeds the freelist with the new empty nodes.
-    fn initPage(self: *PageStructCache, cache: va) void {
+    fn initPage(self: *PageStructCache, cache: VA) void {
         const ptr: [*]Node = @ptrFromInt(cache);
         for (0..node_per_page) |i| {
             const empty_node: *EmptyNode = @ptrCast(&ptr[i]);
@@ -338,7 +338,7 @@ const Slub = struct {
     }
 
     /// Initiate new page with empty nodes.
-    fn initPageObjects(self: *Slub, slub_page: va, page_cache: *PageStructCache) Error!*PageList.Node {
+    fn initPageObjects(self: *Slub, slub_page: VA, page_cache: *PageStructCache) Error!*PageList.Node {
         const pagedata = try page_cache.allocPageStruct();
         pagedata.data.addr = slub_page;
         pagedata.next = null;
