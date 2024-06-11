@@ -128,6 +128,7 @@ const PageData = packed struct {
     /// The start address of the page.
     addr: va,
     /// Pointer to the first element of the free slub object.
+    /// If the page is full, this is zero.
     freelist: va,
 };
 
@@ -258,10 +259,59 @@ const Slub = struct {
         return slub;
     }
 
+    /// Allocate a slub object.
+    pub fn alloc(self: *Slub, page_cache: *PageCache, bpa: *BitmapPageAllocator) Error![*]u8 {
+        if (self.active_page.data.freelist == 0) {
+            try self.mayAllocateNewPage(page_cache, bpa);
+        }
+
+        const object_to_use: *EmptyNode = @ptrFromInt(self.active_page.data.freelist);
+        self.active_page.data.freelist = if (object_to_use.next) |o| @intFromPtr(o) else 0;
+        self.num_objects += 1;
+
+        return @ptrCast(object_to_use);
+    }
+
+    /// Free a slub object.
+    pub fn free(self: *Slub, ptr: [*]u8) Error!void {
+        const node: *EmptyNode = @alignCast(@ptrCast(ptr));
+        node.next = @ptrFromInt(self.active_page.data.freelist);
+        self.active_page.data.freelist = @intFromPtr(node);
+        self.num_objects -= 1;
+
+        // Find the page that contains the object.
+        const object_page = @as(u64, @intFromPtr(node)) & ~arch.page_mask;
+        if (self.active_page.data.addr == object_page) {
+            // No need to do anything.
+            return;
+        }
+        var page_ptr: ?*PageList.Node = self.list_freepage.first;
+        while (page_ptr != null) : (page_ptr = page_ptr.?.next) {
+            if (page_ptr.?.data.addr == object_page) {
+                // No need to do anything.
+            }
+        }
+        page_ptr = self.list_fullpage.first;
+        while (page_ptr != null) : (page_ptr = page_ptr.?.next) {
+            if (page_ptr.?.data.addr == object_page) {
+                // Move the page to the free list.
+                self.list_fullpage.remove(page_ptr.?);
+                self.list_freepage.append(page_ptr.?);
+                return;
+            }
+        }
+
+        // TODO: return empty page to the page allocator.
+
+        @panic("free(): The slub object requested to free was not found in the slub.");
+    }
+
     /// Initiate new page with empty nodes.
     fn initPageObjects(self: *Slub, slub_page: va, page_cache: *PageCache) Error!*PageList.Node {
         const pagedata = try page_cache.allocPageStruct();
         pagedata.data.addr = slub_page;
+        pagedata.next = null;
+        pagedata.prev = null;
 
         for (0..self.objects_per_page) |i| {
             const empty_node: *EmptyNode = @ptrFromInt(slub_page + i * self.size);
@@ -270,6 +320,28 @@ const Slub = struct {
         }
 
         return pagedata;
+    }
+
+    /// Update the active page to the next page.
+    /// If there is no free pages, allocate a new page.
+    fn mayAllocateNewPage(self: *Slub, page_cache: *PageCache, bpa: *BitmapPageAllocator) Error!void {
+        if (self.active_page.data.freelist != 0) {
+            @panic("mayAllocateNewPage() is called though there is a free object.");
+        }
+
+        // If there is no free pages, allocate a new page.
+        if (self.list_freepage.first == null) {
+            const new_page_pfn = bpa.getAdjacentPages(1) orelse return Error.NoMemory;
+            const new_page_struct = try self.initPageObjects(page.pfn2phys(new_page_pfn), page_cache);
+            self.list_freepage.append(new_page_struct);
+
+            self.num_pages += 1;
+        }
+
+        // Here, it is guaranteed that there is at least one free page.
+        const page_to_use = self.list_freepage.popFirst().?;
+        self.list_fullpage.append(self.active_page);
+        self.active_page = page_to_use;
     }
 };
 
@@ -426,4 +498,37 @@ test "PageCache Alloc/Free" {
         len += 1;
     }
     try testing.expectEqual(PageCache.node_per_page * 2, len);
+}
+
+test "Slub" {
+    var page_allocator = MockedPageAllocator{};
+    var page_cache = try PageCache.init(&page_allocator);
+    var arena = try Arena.init(&page_allocator);
+    const slub512 = &arena.slubs[8];
+
+    // Alloc one object.
+    const obj1 = try slub512.alloc(&page_cache, &page_allocator);
+    try testing.expectEqual(1, slub512.num_objects);
+    try testing.expectEqual(1, slub512.num_pages);
+    try testing.expectEqual(null, slub512.list_freepage.first);
+    try testing.expectEqual(null, slub512.list_fullpage.first);
+
+    // Alloc and fill one page with objects.
+    for (0..slub512.objects_per_page - 1) |_| {
+        _ = try slub512.alloc(&page_cache, &page_allocator);
+    }
+    try testing.expectEqual(slub512.objects_per_page, slub512.num_objects);
+    try testing.expectEqual(1, slub512.num_pages);
+    try testing.expectEqual(0, slub512.active_page.data.freelist);
+
+    // Alloc one more object.
+    const obj2 = try slub512.alloc(&page_cache, &page_allocator);
+    try testing.expectEqual(slub512.objects_per_page + 1, slub512.num_objects);
+    try testing.expectEqual(2, slub512.num_pages);
+    try testing.expectEqual(0, slub512.list_freepage.len);
+    try testing.expectEqual(1, slub512.list_fullpage.len);
+
+    // Free two objects.
+    try slub512.free(obj2);
+    try slub512.free(obj1);
 }
