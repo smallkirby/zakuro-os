@@ -195,6 +195,13 @@ pub fn getAdjacentPages(self: *Self, n: usize) ?Pfn {
     return null;
 }
 
+/// Return the adjacent `n` pages to the allocator.
+pub fn returnAdjacentPages(self: *Self, pfn: Pfn, n: usize) void {
+    for (0..n) |i| {
+        self.set(pfn + i, .Usable);
+    }
+}
+
 const PageState = enum(u1) {
     /// Page is already allocated or unusable.
     Unusable = 0,

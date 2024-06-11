@@ -49,8 +49,18 @@ pub fn allocator(self: *Self) Allocator {
     };
 }
 
-fn alloc(_: *anyopaque, _: usize, _: u8, _: usize) ?[*]u8 {
-    @panic("Not implemented");
+fn alloc(ctx: *anyopaque, len: usize, _: u8, _: usize) ?[*]u8 {
+    const self: *Self = @alignCast(@ptrCast(ctx));
+
+    if (wrapsMemorySize(len) catch unreachable) |slub_size| {
+        const slub_index = slubsize2index(slub_size).?;
+        const slub = &self.arena.slubs[slub_index];
+        return slub.alloc(&self.arena.page_cache, self.bpa) catch null;
+    } else {
+        const num_page = (len + page_size - 1) / page_size;
+        const pages = self.bpa.getAdjacentPages(num_page) orelse return null;
+        return @ptrFromInt(page.pfn2phys(pages));
+    }
 }
 
 /// Not implemented.
@@ -66,12 +76,22 @@ fn resize(
 }
 
 fn free(
-    _: *anyopaque,
-    _: []u8,
+    ctx: *anyopaque,
+    buf: []u8,
     _: u8,
     _: usize,
 ) void {
-    @panic("Not implemented");
+    const self: *Self = @alignCast(@ptrCast(ctx));
+    const len = buf.len;
+
+    if (wrapsMemorySize(len) catch unreachable) |slub_size| {
+        const slub_index = slubsize2index(slub_size).?;
+        const slub = &self.arena.slubs[slub_index];
+        return slub.free(buf.ptr) catch {};
+    } else {
+        const num_page = (len + page_size - 1) / page_size;
+        self.bpa.returnAdjacentPages(page.phys2pfn(@intFromPtr(buf.ptr)), num_page);
+    }
 }
 
 /// Virtual address.
@@ -80,7 +100,7 @@ const va = u64;
 /// Sizes of the slubs.
 const slub_sizes = [_]usize{ 8, 16, 32, 64, 96, 128, 192, 256, 512, 1024, 2048, 4096 };
 /// Converts the size to the index of the slub.
-fn slubsize2index(size: usize) usize {
+fn slubsize2index(size: usize) ?usize {
     return switch (size) {
         8 => 0,
         16 => 1,
@@ -94,7 +114,7 @@ fn slubsize2index(size: usize) usize {
         1024 => 9,
         2048 => 10,
         4096 => 11,
-        else => unreachable,
+        else => null,
     };
 }
 
@@ -110,7 +130,7 @@ const Arena = struct {
         var page_cache = try PageCache.init(bpa);
         var slubs: [slub_sizes.len]Slub = undefined;
         for (slub_sizes) |size| {
-            const index = slubsize2index(size);
+            const index = slubsize2index(size).?;
             slubs[index] = try Slub.init(size, &page_cache, bpa);
         }
 
@@ -414,6 +434,11 @@ const MockedPageAllocator = struct {
         );
         return page.phys2pfn(@intFromPtr(ret));
     }
+
+    pub fn returnAdjacentPages(_: *MockedPageAllocator, pfn: page.Pfn, n: usize) void {
+        const ret = std.c.munmap(@ptrFromInt(page.pfn2phys(pfn)), page_size * n);
+        if (ret != 0) unreachable;
+    }
 };
 
 test "Initial state of slubs" {
@@ -531,4 +556,30 @@ test "Slub" {
     // Free two objects.
     try slub512.free(obj2);
     try slub512.free(obj1);
+}
+
+test "SlubAllocator" {
+    var bpa = BitmapPageAllocator{};
+    var slub_allocator = try SlubAllocator.init(&bpa);
+    const alctr = slub_allocator.allocator();
+
+    const obj1 = try alctr.alloc(u64, 1);
+    try testing.expectEqual(1, slub_allocator.arena.slubs[0].num_objects);
+    _ = try alctr.alloc(u64, 1);
+    try testing.expectEqual(2, slub_allocator.arena.slubs[0].num_objects);
+
+    try testing.expectEqual(0, slub_allocator.arena.slubs[1].num_objects);
+    _ = try alctr.alloc(u64, 2);
+    try testing.expectEqual(1, slub_allocator.arena.slubs[1].num_objects);
+    _ = try alctr.alloc(u64, 2);
+    _ = try alctr.alloc(u64, 2);
+    try testing.expectEqual(3, slub_allocator.arena.slubs[1].num_objects);
+
+    alctr.free(obj1);
+    try testing.expectEqual(1, slub_allocator.arena.slubs[0].num_objects);
+    alctr.free(obj1);
+    try testing.expectEqual(0, slub_allocator.arena.slubs[0].num_objects);
+
+    const obj_paged = try alctr.alloc(u8, page_size + 1);
+    alctr.free(obj_paged);
 }
