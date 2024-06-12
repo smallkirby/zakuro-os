@@ -5,6 +5,8 @@ const font = zakuro.font;
 const colors = zakuro.color;
 const Vector = zakuro.Vector;
 
+pub const LayerWriter = @import("gfx/layer.zig").LayeredWriter;
+
 /// Pixel data format defined by UEFI.
 pub const PixelFormat = enum(u8) {
     PixelRGBResv8BitPerColor,
@@ -25,6 +27,10 @@ pub const PixelColor = struct {
     red: u8,
     green: u8,
     blue: u8,
+
+    pub fn eql(lhs: PixelColor, rhs: PixelColor) bool {
+        return lhs.red == rhs.red and lhs.green == rhs.green and lhs.blue == rhs.blue;
+    }
 };
 
 /// Pixel writer to write a pixel color to the framebuffer.
