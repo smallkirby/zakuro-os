@@ -45,12 +45,12 @@ pub const LayeredWriter = struct {
         return &self.layers_stack.items[self.layers_stack.items.len - 1];
     }
 
-    fn findLayer(self: *Self, id: usize) ?*Layer {
+    inline fn findLayer(self: *Self, id: usize) ?*Layer {
         const ix = self.findLayerIndex(id) orelse return null;
         return &self.layers_stack.items[ix];
     }
 
-    inline fn findLayerIndex(self: *Self, id: usize) ?usize {
+    fn findLayerIndex(self: *Self, id: usize) ?usize {
         for (self.layers_stack.items, 0..) |*layer, ix| {
             if (layer.id == id) {
                 return ix;
