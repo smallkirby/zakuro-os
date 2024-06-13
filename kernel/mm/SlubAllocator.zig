@@ -151,11 +151,10 @@ const Arena = struct {
     }
 };
 
-/// List entry of pages.
-const PageList = std.DoublyLinkedList(PageData);
-/// Page data.
-/// Slub manages caches using this struct.
-const PageData = packed struct {
+/// Linked list of slub pages.
+const SlubPageList = std.DoublyLinkedList(SlubPage);
+/// Single page used as a slub cache.
+const SlubPage = packed struct {
     /// The start address of the page.
     addr: VA,
     /// Pointer to the first element of the free slub object.
@@ -163,7 +162,7 @@ const PageData = packed struct {
     freelist: VA,
 };
 
-/// Dedicated allocator for page structure under the environment
+/// Dedicated allocator for SlubPageList.Node structure under the environment
 /// where only page allocator is available.
 /// This allocator requests an entire page from the page allocator
 /// and uses it to allocate page structures.
@@ -173,13 +172,13 @@ const PageData = packed struct {
 /// The allocated page is split into objects.
 /// When the object is not used, they contains the pointer to the next object.
 const PageStructCache = struct {
-    const Node = PageList.Node;
-    const EmptyNode = packed struct {
-        next: ?*EmptyNode,
+    const SlubPageNode = SlubPageList.Node;
+    const EmptySlubPageNode = packed struct {
+        next: ?*EmptySlubPageNode,
     };
 
     /// Size of the page struct.
-    const node_size: usize = @sizeOf(Node);
+    const node_size: usize = @sizeOf(SlubPageNode);
     /// Number of page struct that can be allocated in a page.
     const node_per_page: usize = page_size / node_size;
 
@@ -190,7 +189,7 @@ const PageStructCache = struct {
     /// Total number of allocated objects.
     num_objects: usize = 0,
     /// Page struct that will be allocated next.
-    freelist: ?*EmptyNode = null,
+    freelist: ?*EmptySlubPageNode = null,
 
     /// Instantiate the page cache.
     pub fn init(pa: *BitmapPageAllocator) Error!PageStructCache {
@@ -206,7 +205,7 @@ const PageStructCache = struct {
     }
 
     /// Allocate a page structure.
-    pub fn allocPageStruct(self: *PageStructCache) Error!*Node {
+    pub fn allocPageStruct(self: *PageStructCache) Error!*SlubPageNode {
         try self.mayAllocNewPage();
 
         const ret = self.freelist.?;
@@ -217,8 +216,8 @@ const PageStructCache = struct {
     }
 
     /// Free a page structure.
-    pub fn freePageStruct(self: *PageStructCache, node: *Node) Error!void {
-        const empty_node: *EmptyNode = @ptrCast(node);
+    pub fn freePageStruct(self: *PageStructCache, node: *SlubPageNode) Error!void {
+        const empty_node: *EmptySlubPageNode = @ptrCast(node);
         empty_node.next = self.freelist orelse @ptrFromInt(0);
         self.freelist = empty_node;
         self.num_objects -= 1;
@@ -238,10 +237,10 @@ const PageStructCache = struct {
     /// Initiate a new page to fill it with empty node list.
     /// Feeds the freelist with the new empty nodes.
     fn initPage(self: *PageStructCache, cache: VA) void {
-        const ptr: [*]Node = @ptrFromInt(cache);
+        const ptr: [*]SlubPageNode = @ptrFromInt(cache);
         for (0..node_per_page) |i| {
-            const empty_node: *EmptyNode = @ptrCast(&ptr[i]);
-            empty_node.next = self.freelist orelse @ptrFromInt(0);
+            const empty_node: *EmptySlubPageNode = @ptrCast(&ptr[i]);
+            empty_node.next = self.freelist;
             self.freelist = empty_node;
         }
 
@@ -261,11 +260,11 @@ const Slub = struct {
     objects_per_page: usize,
 
     /// Active page that can allocate at least one object.
-    active_page: *PageList.Node,
+    active_page: *SlubPageList.Node,
     /// List of pages that are not full excluding active_page.
-    list_freepage: PageList,
+    list_freepage: SlubPageList,
     /// List of pages that are full.
-    list_fullpage: PageList,
+    list_fullpage: SlubPageList,
     /// Total number of allocated objects.
     num_objects: usize = 0,
     /// Total number of allocated pages.
@@ -285,7 +284,7 @@ const Slub = struct {
             .list_fullpage = .{},
             .num_pages = 1,
         };
-        slub.active_page = try slub.initPageObjects(page.pfn2phys(first_page_pfn), page_cache);
+        slub.active_page = try slub.initSlubPage(page.pfn2phys(first_page_pfn), page_cache);
 
         return slub;
     }
@@ -293,7 +292,7 @@ const Slub = struct {
     /// Allocate a slub object.
     pub fn alloc(self: *Slub, page_cache: *PageStructCache, bpa: *BitmapPageAllocator) Error![*]u8 {
         if (self.active_page.data.freelist == 0) {
-            try self.mayAllocateNewPage(page_cache, bpa);
+            try self.swapActivePage(page_cache, bpa);
         }
 
         const object_to_use: *EmptyNode = @ptrFromInt(self.active_page.data.freelist);
@@ -316,7 +315,7 @@ const Slub = struct {
             // No need to do anything.
             return;
         }
-        var page_ptr: ?*PageList.Node = self.list_freepage.first;
+        var page_ptr: ?*SlubPageList.Node = self.list_freepage.first;
         while (page_ptr != null) : (page_ptr = page_ptr.?.next) {
             if (page_ptr.?.data.addr == object_page) {
                 // No need to do anything.
@@ -338,24 +337,27 @@ const Slub = struct {
     }
 
     /// Initiate new page with empty nodes.
-    fn initPageObjects(self: *Slub, slub_page: VA, page_cache: *PageStructCache) Error!*PageList.Node {
-        const pagedata = try page_cache.allocPageStruct();
-        pagedata.data.addr = slub_page;
-        pagedata.next = null;
-        pagedata.prev = null;
+    fn initSlubPage(self: *Slub, slub_page: VA, page_cache: *PageStructCache) Error!*SlubPageList.Node {
+        const pagelist_node = try page_cache.allocPageStruct();
+        pagelist_node.data.addr = slub_page;
+        pagelist_node.data.freelist = 0;
+        pagelist_node.next = null;
+        pagelist_node.prev = null;
+        const pagedata = &pagelist_node.data;
 
         for (0..self.objects_per_page) |i| {
             const empty_node: *EmptyNode = @ptrFromInt(slub_page + i * self.size);
-            empty_node.next = if (pagedata.data.freelist == 0) null else @ptrFromInt(pagedata.data.freelist);
-            pagedata.data.freelist = @intFromPtr(empty_node);
+            empty_node.next = if (pagedata.freelist == 0) null else @ptrFromInt(pagedata.freelist);
+            pagedata.freelist = @intFromPtr(empty_node);
         }
 
-        return pagedata;
+        return pagelist_node;
     }
 
-    /// Update the active page to the next page.
+    /// When there is no free object in the current active page,
+    /// swap the active page with a free page.
     /// If there is no free pages, allocate a new page.
-    fn mayAllocateNewPage(self: *Slub, page_cache: *PageStructCache, bpa: *BitmapPageAllocator) Error!void {
+    fn swapActivePage(self: *Slub, page_cache: *PageStructCache, bpa: *BitmapPageAllocator) Error!void {
         if (self.active_page.data.freelist != 0) {
             @panic("mayAllocateNewPage() is called though there is a free object.");
         }
@@ -363,7 +365,7 @@ const Slub = struct {
         // If there is no free pages, allocate a new page.
         if (self.list_freepage.first == null) {
             const new_page_pfn = bpa.getAdjacentPages(1) orelse return Error.NoMemory;
-            const new_page_struct = try self.initPageObjects(page.pfn2phys(new_page_pfn), page_cache);
+            const new_page_struct = try self.initSlubPage(page.pfn2phys(new_page_pfn), page_cache);
             self.list_freepage.append(new_page_struct);
 
             self.num_pages += 1;
@@ -496,7 +498,7 @@ test "PageCache init" {
     try testing.expectEqual(node_size, @intFromPtr(freelist.?) - @intFromPtr(freelist.?.next));
 
     var len: usize = 0;
-    var p: ?*PageStructCache.EmptyNode = freelist;
+    var p: ?*PageStructCache.EmptySlubPageNode = freelist;
     while (p != null) : (p = p.?.next) {
         len += 1;
     }
@@ -506,7 +508,7 @@ test "PageCache init" {
 test "PageCache Alloc/Free" {
     var page_allocator = MockedPageAllocator{};
     var page_cache = try PageStructCache.init(&page_allocator);
-    var nodes = [_]*PageStructCache.Node{undefined} ** PageStructCache.node_per_page;
+    var nodes = [_]*PageStructCache.SlubPageNode{undefined} ** PageStructCache.node_per_page;
 
     // Alloc
     for (0..PageStructCache.node_per_page) |i| {
@@ -532,7 +534,7 @@ test "PageCache Alloc/Free" {
     try testing.expectEqual(0, page_cache.num_objects);
 
     var len: usize = 0;
-    var p: ?*PageStructCache.EmptyNode = page_cache.freelist;
+    var p: ?*PageStructCache.EmptySlubPageNode = page_cache.freelist;
     while (p != null) : (p = p.?.next) {
         len += 1;
     }
