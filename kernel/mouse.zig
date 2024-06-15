@@ -16,6 +16,7 @@ pub const intr_vector = 0x30;
 pub const mouse_cursor_width = 12;
 /// Height of the mouse cursor.
 pub const mouse_cursor_height = 21;
+pub const mouse_transparent_color = colors.Blue;
 /// Mouse cursor shape data.
 const mouse_shape = [mouse_cursor_height]*const [mouse_cursor_width:0]u8{
     ".           ",
@@ -69,23 +70,16 @@ pub const MouseCursor = struct {
     pub fn drawMouse(self: Self) void {
         for (0..mouse_cursor_height) |y| {
             for (0..mouse_cursor_width) |x| {
-                switch (mouse_shape[y][x]) {
-                    '@' => self.window.writeAt(
-                        .{
-                            .x = @as(u32, @truncate(x)),
-                            .y = @as(u32, @truncate(y)),
-                        },
-                        colors.Black,
-                    ),
-                    '.' => self.window.writeAt(
-                        .{
-                            .x = @as(u32, @truncate(x)),
-                            .y = @as(u32, @truncate(y)),
-                        },
-                        colors.White,
-                    ),
-                    else => {},
-                }
+                const color = switch (mouse_shape[y][x]) {
+                    '@' => colors.Black,
+                    '.' => colors.White,
+                    ' ' => mouse_transparent_color,
+                    else => unreachable,
+                };
+                self.window.writeAt(.{
+                    .x = @as(u32, @truncate(x)),
+                    .y = @as(u32, @truncate(y)),
+                }, color);
             }
         }
     }

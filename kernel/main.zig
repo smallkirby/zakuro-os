@@ -126,7 +126,6 @@ fn main(
         fb_config.horizontal_resolution,
         fb_config.vertical_resolution,
     );
-    bgwindow.transparent_color = color.Blue;
 
     // Draw desktop and dock bar.
     gfx.lib.drawDesktop(bgwindow);
@@ -148,6 +147,7 @@ fn main(
         mouse.mouse_cursor_height,
     );
     mouse_window.moveOrigin(.{ .x = 0x100, .y = 0x100 });
+    mouse_window.transparent_color = mouse.mouse_transparent_color;
     var cursor = mouse.MouseCursor{
         .ecolor = color.LightPurple,
         .window = mouse_window,
