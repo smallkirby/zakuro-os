@@ -19,7 +19,7 @@ const mm = zakuro.mm;
 const MemoryMap = mm.uefi.MemoryMap;
 const BitmapPageAllocator = mm.BitmapPageAllocator;
 const SlubAllocator = mm.SlubAllocator;
-const LayeredWriter = zakuro.gfx.LayerWriter;
+const gfx = zakuro.gfx;
 
 /// Override panic impl
 pub const panic = @import("panic.zig").panic_fn;
@@ -116,51 +116,46 @@ fn main(
     // Initialize interrupt queue
     intr_queue = try FixedSizeQueue(IntrMessage).init(16, gpa);
 
-    // Initialize graphic console
+    // Initialize a pixel writer
     const pixel_writer = graphics.PixelWriter.new(fb_config);
-    var con = console.Console.new(pixel_writer, color.GBFg, color.GBBg);
+    gfx.layer.initialize(pixel_writer, gpa);
 
-    // Clear the screen
-    for (0..fb_config.horizontal_resolution) |x| {
-        for (0..fb_config.vertical_resolution) |y| {
-            pixel_writer.writePixel(
-                @bitCast(@as(u32, @truncate(x))),
-                @bitCast(@as(u32, @truncate(y))),
-                color.LightPurple,
-            );
-        }
-    }
-    // Draw a dock
-    pixel_writer.fillRectangle(
-        .{ .x = @intCast(fb_config.horizontal_resolution - 0x30), .y = 0 },
-        .{ .x = 0x30, .y = fb_config.vertical_resolution },
-        color.DarkPurple,
+    // Initialize graphic layers
+    var layers = gfx.layer.getLayers();
+    const bgwindow = try layers.spawnWindow(
+        fb_config.horizontal_resolution,
+        fb_config.vertical_resolution,
     );
-    // Draw hot button (mock)
-    for (0..3) |x| {
-        for (0..3) |y| {
-            pixel_writer.fillRectangle(
-                .{
-                    .x = @as(i32, @intCast(fb_config.horizontal_resolution)) - 0x20 + @as(i32, @intCast(x * 6)),
-                    .y = @as(i32, @intCast(fb_config.vertical_resolution)) - 0x20 + @as(i32, @intCast(y * 6)),
-                },
-                .{ .x = 3, .y = 3 },
-                color.White,
-            );
-        }
-    }
+    bgwindow.transparent_color = color.Blue;
 
+    // Draw desktop and dock bar.
+    gfx.lib.drawDesktop(bgwindow);
+    gfx.lib.drawDock(bgwindow);
+
+    // Initialize graphic console
+    var con = console.Console.new(
+        bgwindow,
+        color.GBFg,
+        color.GBBg,
+    );
     for (0..30) |i| {
         con.print("{d}: {s}\n", .{ i, "Hello from console...!" });
     }
 
+    // Initialize graphic mouse cursor
+    const mouse_window = try layers.spawnWindow(
+        mouse.mouse_cursor_width,
+        mouse.mouse_cursor_height,
+    );
+    mouse_window.moveOrigin(.{ .x = 0x100, .y = 0x100 });
     var cursor = mouse.MouseCursor{
         .ecolor = color.LightPurple,
-        .pos = .{ .x = 100, .y = 100 },
-        .writer = &pixel_writer,
-        .screen_size = .{ .x = fb_config.horizontal_resolution, .y = fb_config.vertical_resolution },
+        .window = mouse_window,
     };
     cursor.drawMouse();
+
+    // Flush graphic layers to render.
+    layers.flush();
 
     // Register PCI devices.
     try pci.registerAllDevices();

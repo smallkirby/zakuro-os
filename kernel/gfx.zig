@@ -5,7 +5,9 @@ const font = zakuro.font;
 const colors = zakuro.color;
 const Vector = zakuro.Vector;
 
-pub const LayerWriter = @import("gfx/layer.zig").LayeredWriter;
+pub const layer = @import("gfx/layer.zig");
+pub const window = @import("gfx/window.zig");
+pub const lib = @import("gfx/lib.zig");
 
 /// Pixel data format defined by UEFI.
 pub const PixelFormat = enum(u8) {
@@ -24,16 +26,16 @@ pub const FrameBufferConfig = extern struct {
 
 /// Represents a pixel RGB color.
 pub const PixelColor = struct {
-    red: u8,
-    green: u8,
-    blue: u8,
+    r: u8,
+    g: u8,
+    b: u8,
 
     pub fn eql(lhs: PixelColor, rhs: PixelColor) bool {
-        return lhs.red == rhs.red and lhs.green == rhs.green and lhs.blue == rhs.blue;
+        return lhs.r == rhs.r and lhs.g == rhs.g and lhs.b == rhs.b;
     }
 };
 
-/// Pixel writer to write a pixel color to the framebuffer.
+/// Primitive pixel writer to write a pixel color to the framebuffer.
 pub const PixelWriter = struct {
     config: *FrameBufferConfig,
     write_pixel_func: *const fn (Self, u32, u32, PixelColor) void,
@@ -50,44 +52,15 @@ pub const PixelWriter = struct {
         };
     }
 
-    /// Write an ASCII character to the specified position.
-    pub fn writeAscii(self: Self, x: i32, y: i32, c: u8, color: PixelColor) void {
-        const fonts = font.getFont(c).?;
-        for (0..font.FONT_HEIGHT) |dy| {
-            for (0..font.FONT_WIDTH) |dx| {
-                if ((fonts[dy] << @truncate(dx)) & 0x80 != 0) {
-                    const px = usize2i32(dx) + x;
-                    const py = usize2i32(dy) + y;
-                    self.writePixel(px, py, color);
-                }
-            }
-        }
-    }
-
-    /// Write a string to the specified position until null character.
-    pub fn writeString(self: Self, x: i32, y: i32, s: []const u8, color: PixelColor) void {
-        var px = x;
-        var py = y;
-        for (s) |c| {
-            if (c == 0) break;
-            if (c == '\n') {
-                px = x;
-                py += @intCast(font.FONT_HEIGHT);
-            } else {
-                self.writeAscii(px, py, c, color);
-                px += @intCast(font.FONT_WIDTH);
-            }
-        }
-    }
-
-    /// Write a pixel color to the specified position.
-    pub fn writePixel(self: Self, x: i32, y: i32, color: PixelColor) void {
-        if (x < 0 or x >= @as(i32, @intCast(self.config.horizontal_resolution)) or
-            y < 0 or y >= @as(i32, @intCast(self.config.vertical_resolution)))
+    /// Write a pixel color to the frame buffer.
+    pub fn writePixel(self: Self, x: u32, y: u32, color: PixelColor) void {
+        if (x >= self.config.horizontal_resolution or
+            y >= (self.config.vertical_resolution))
         {
             return;
         }
-        return self.write_pixel_func(
+
+        self.write_pixel_func(
             self,
             @bitCast(x),
             @bitCast(y),
@@ -95,61 +68,26 @@ pub const PixelWriter = struct {
         );
     }
 
-    /// Draw a rectangle with the specified position, size, and color.
-    /// The only edge of the rectangle is drawn.
-    pub fn drawRectangle(
-        self: Self,
-        pos: Vector(i32),
-        size: Vector(u32),
-        color: PixelColor,
-    ) void {
-        for (0..size.x) |dx| {
-            self.writePixel(size.x + @as(u32, @truncate(dx)), pos.y, color);
-        }
-    }
-
-    /// Fill a rectangle with the specified position, size, and color.
-    pub fn fillRectangle(
-        self: Self,
-        pos: Vector(i32),
-        size: Vector(u32),
-        color: PixelColor,
-    ) void {
-        for (0..size.y) |dy| {
-            for (0..size.x) |dx| {
-                self.writePixel(
-                    pos.x + usize2i32(dx),
-                    pos.y + usize2i32(dy),
-                    color,
-                );
-            }
-        }
-    }
-
     /// Write a pixel color to the specified position in RGB format.
     fn writePixelRgb(self: Self, x: u32, y: u32, color: PixelColor) void {
         const addr = pixelAt(self.config, x, y);
-        addr[0] = color.red;
-        addr[1] = color.green;
-        addr[2] = color.blue;
+        addr[0] = color.r;
+        addr[1] = color.g;
+        addr[2] = color.b;
     }
 
     /// Write a pixel color to the specified position in BGR format.
     fn writePixelBgr(self: Self, x: u32, y: u32, color: PixelColor) void {
         const addr = pixelAt(self.config, x, y);
-        addr[0] = color.blue;
-        addr[1] = color.green;
-        addr[2] = color.red;
+        addr[0] = color.b;
+        addr[1] = color.g;
+        addr[2] = color.r;
     }
 
-    /// Get the address of the framebuffer at the specified pixel.
+    // Get the address of the framebuffer at the specified pixel.
     /// Note that this function does not perform bounds checking.
     fn pixelAt(config: *FrameBufferConfig, x: u32, y: u32) [*]u8 {
         const rel_pos = config.pixels_per_scan_line *| y +| x;
         return @ptrCast(&config.frame_buffer[rel_pos *| 4]);
     }
 };
-
-pub fn usize2i32(n: usize) i32 {
-    return @bitCast(@as(u32, @truncate(n)));
-}

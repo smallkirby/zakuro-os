@@ -3,7 +3,7 @@
 const Color = @import("gfx.zig").PixelColor;
 
 fn c(red: u8, green: u8, blue: u8) Color {
-    return .{ .red = red, .green = green, .blue = blue };
+    return .{ .r = red, .g = green, .b = blue };
 }
 
 pub const Red = c(0xFF, 0x00, 0x00);

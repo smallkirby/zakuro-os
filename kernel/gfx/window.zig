@@ -6,7 +6,9 @@ const Allocator = std.mem.Allocator;
 
 const zakuro = @import("zakuro");
 const gfx = zakuro.gfx;
-const Pos = zakuro.Vector(i32);
+const Pos = zakuro.Vector(u32);
+const PixelColor = gfx.PixelColor;
+const font = zakuro.font;
 
 pub const WindowError = error{
     /// Memory allocation failed.
@@ -14,18 +16,22 @@ pub const WindowError = error{
 };
 const Error = WindowError;
 
-/// Windows is a rectangle in a layer.
-/// Layers have a infinite size, but windows have a fixed size.
+/// Windows is a graphical rectangle region.
+/// It have its buffer. To render it on a screen, you have to explicitly flush it.
 pub const Window = struct {
     const Self = @This();
 
     /// Width in pixels of this window.
-    width: usize,
+    width: u32,
     /// Height in pixels of this window.
-    height: usize,
+    height: u32,
+    /// Origin of this window.
+    origin: Pos,
     /// Transparent color of this window.
     /// If a pixel has this color in this window, the pixel is not drawn.
     transparent_color: ?gfx.PixelColor = null,
+    /// Visibility of this window.
+    visible: bool = true,
     /// Pixel data of this window.
     data: [][]gfx.PixelColor,
     /// Memory allocator used to allocate an pixel buffer.
@@ -33,7 +39,7 @@ pub const Window = struct {
 
     /// Initialize the window.
     /// Caller MUST ensure to call `deinit` to free the allocated memory.
-    pub fn init(width: usize, height: usize, allocator: Allocator) Error!Self {
+    pub fn init(width: u32, height: u32, allocator: Allocator) Error!Self {
         var data = allocator.alloc([]gfx.PixelColor, height) catch return Error.NoMemory;
         for (0..height) |y| {
             data[y] = allocator.alloc(gfx.PixelColor, width) catch return Error.NoMemory;
@@ -43,6 +49,7 @@ pub const Window = struct {
             .width = width,
             .height = height,
             .data = data,
+            .origin = .{ .x = 0, .y = 0 },
             .allocator = allocator,
         };
     }
@@ -51,20 +58,108 @@ pub const Window = struct {
         self.allocator.free(self.data);
     }
 
-    /// Draw the window at the specified position.
-    pub fn drawAt(self: *Self, pos: Pos, writer: gfx.PixelWriter) void {
+    /// Write a pixel color at the specified position.
+    /// This function just writes the pixel color to the buffer.
+    /// You have to flush the buffer to the screen.
+    pub fn writeAt(self: Self, pos: Pos, color: gfx.PixelColor) void {
+        self.data[pos.y][pos.x] = color;
+    }
+
+    /// Draw the buffer in the window at the origin.
+    pub fn flush(self: Self, writer: gfx.PixelWriter) void {
         for (0..self.height) |dy| {
             for (0..self.width) |dx| {
                 const c = self.at(dx, dy);
-                if (self.transparent_color != null and gfx.PixelColor.eql(c, self.transparent_color))
-                    continue;
-                writer.writePixel(pos.x + dx, pos.y + dy, self.data[dy][dx]);
+                if (self.transparent_color) |tc| {
+                    if (gfx.PixelColor.eql(c, tc))
+                        continue;
+                }
+                writer.writePixel(
+                    self.origin.x + @as(u32, @truncate(dx)),
+                    self.origin.y + @as(u32, @truncate(dy)),
+                    self.data[dy][dx],
+                );
             }
         }
     }
 
+    /// Write an ASCII character to the specified position.
+    pub fn writeAscii(self: Self, x: u32, y: u32, c: u8, color: PixelColor) void {
+        const fonts = font.getFont(c).?;
+        for (0..font.FONT_HEIGHT) |dy| {
+            for (0..font.FONT_WIDTH) |dx| {
+                if ((fonts[dy] << @truncate(dx)) & 0x80 != 0) {
+                    const px = @as(u32, @truncate(dx)) + x;
+                    const py = @as(u32, @truncate(dy)) + y;
+                    self.writeAt(.{ .x = px, .y = py }, color);
+                }
+            }
+        }
+    }
+
+    /// Fill a rectangle with the specified position, size, and color.
+    pub fn fillRectangle(self: Self, pos: Pos, size: Pos, color: PixelColor) void {
+        for (0..size.y) |dy| {
+            for (0..size.x) |dx| {
+                self.writeAt(
+                    .{
+                        .x = pos.x + @as(u32, @truncate(dx)),
+                        .y = pos.y + @as(u32, @truncate(dy)),
+                    },
+                    color,
+                );
+            }
+        }
+    }
+
+    /// Draw a rectangle with the specified position, size, and color.
+    /// The only edge of the rectangle is drawn.
+    pub fn drawRectangle(self: Self, pos: Pos, size: Pos, color: PixelColor) void {
+        for (0..size.x) |dx| {
+            self.writeAt(
+                .{ .x = size.x + @as(u32, @truncate(dx)), .y = pos.y },
+                color,
+            );
+        }
+    }
+
+    /// Write a string to the specified position until null character.
+    pub fn writeString(self: Self, pos: Pos, s: []const u8, color: PixelColor) void {
+        var px = pos.x;
+        var py = pos.y;
+        for (s) |c| {
+            if (c == 0) break;
+            if (c == '\n') {
+                px = pos.x;
+                py += @intCast(font.FONT_HEIGHT);
+            } else {
+                self.writeAscii(px, py, c, color);
+                px += @intCast(font.FONT_WIDTH);
+            }
+        }
+    }
+
+    /// Move the origin of this window.
+    pub fn moveOrigin(self: *Self, pos: Pos) void {
+        self.origin = pos;
+    }
+
+    /// Move the origin of this window relatively.
+    pub fn moveOriginRel(self: *Self, delta: zakuro.Vector(i32)) void {
+        var x: i32 = @bitCast(self.origin.x);
+        var y: i32 = @bitCast(self.origin.y);
+        x +|= delta.x;
+        y +|= delta.y;
+        if (x < 0) x = 0;
+        if (y < 0) y = 0;
+        self.origin = .{
+            .x = @bitCast(x),
+            .y = @bitCast(y),
+        };
+    }
+
     /// Get a pixel color at the specified position.
-    inline fn at(self: *Self, x: i32, y: i32) gfx.PixelColor {
+    inline fn at(self: Self, x: usize, y: usize) gfx.PixelColor {
         return self.data[y][x];
     }
 };

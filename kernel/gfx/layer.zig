@@ -8,7 +8,7 @@ const Window = @import("window.zig").Window;
 const zakuro = @import("zakuro");
 const gfx = zakuro.gfx;
 const PixelWriter = gfx.PixelWriter;
-const Pos = zakuro.Vector(i32);
+const Pos = zakuro.Vector(u32);
 
 const LayerError = error{
     /// Failed to allocate memory.
@@ -16,150 +16,63 @@ const LayerError = error{
 };
 const Error = LayerError;
 
-pub const LayeredWriter = struct {
+/// Global instance of the window layers.
+var layers: Layers = undefined;
+
+pub fn getLayers() *Layers {
+    return &layers;
+}
+
+/// Initialize the global layered writer.
+pub fn initialize(pixel_writer: PixelWriter, allocator: Allocator) void {
+    layers = Layers.init(pixel_writer, allocator);
+}
+
+/// Manages a list of windows and their drawing order.
+const Layers = struct {
     const Self = @This();
-    const LayerList = ArrayList(Layer);
+    const WindowList = ArrayList(Window);
 
     /// Pixel writer.
     writer: PixelWriter,
-    /// List of layers.
-    layers_stack: LayerList,
-    /// ID of the next layer.
-    next_id: usize = 0,
+    /// List of windows.
+    windows_stack: WindowList,
 
     allocator: Allocator,
 
     pub fn init(writer: PixelWriter, allocator: Allocator) Self {
         return Self{
             .writer = writer,
-            .layers_stack = LayerList.init(allocator),
+            .windows_stack = WindowList.init(allocator),
             .allocator = allocator,
         };
     }
 
-    /// Generate a new layer.
-    pub fn spawnLayer(self: *Self) Error!*Layer {
-        self.layers_stack.append(Layer.init(self.next_id)) catch return Error.NoMemory;
-        self.next_id += 1;
+    /// Generate a new window.
+    pub fn spawnWindow(self: *Self, width: u32, height: u32) Error!*Window {
+        self.windows_stack.append(try Window.init(
+            width,
+            height,
+            self.allocator,
+        )) catch return Error.NoMemory;
 
-        return &self.layers_stack.items[self.layers_stack.items.len - 1];
+        return &self.windows_stack.items[self.windows_stack.items.len - 1];
     }
 
-    inline fn findLayer(self: *Self, id: usize) ?*Layer {
-        const ix = self.findLayerIndex(id) orelse return null;
-        return &self.layers_stack.items[ix];
-    }
-
-    fn findLayerIndex(self: *Self, id: usize) ?usize {
-        for (self.layers_stack.items, 0..) |*layer, ix| {
-            if (layer.id == id) {
-                return ix;
-            }
-        }
-        return null;
-    }
-
-    /// Move the specified layer to the given position.
-    pub fn move(self: *Self, id: usize, pos: Pos) void {
-        if (self.findLayer(id)) |layer| {
-            layer.origin = pos;
-        } else {
-            unreachable;
-        }
-    }
-
-    /// Move the specified layer by the given delta.
-    pub fn moveRelative(self: *Self, id: usize, delta: Pos) void {
-        if (self.findLayer(id)) |layer| {
-            layer.origin.x += delta.x;
-            layer.origin.y += delta.y;
-        } else {
-            unreachable;
-        }
-    }
-
-    /// Draw all layers from the bottom to the top.
-    pub fn draw(self: *Self) void {
-        for (self.layers_stack.items) |layer| {
-            if (layer.visible) {
-                layer.draw(self.writer);
+    /// Draw all windows from the bottom to the top.
+    pub fn flush(self: *Self) void {
+        for (self.windows_stack.items) |*window| {
+            if (window.visible) {
+                window.flush(self.writer);
             }
         }
     }
 
-    /// Make the specified layer invisible.
-    pub fn hide(self: *Self, id: usize) void {
-        if (self.findLayer(id)) |layer| {
-            layer.visible = false;
-        } else {
-            unreachable;
-        }
-    }
-
-    /// Set the z-index of the specified layer.
-    /// If the z-index exceeds the number of layers, the layer is moved to the top.
-    /// If the z-index is negative, the layer is made invisible.
-    pub fn setZ(self: *Self, id: usize, z: usize) void {
-        var pos = z;
-        if (z >= self.layers_stack.items.len) {
-            pos = self.layers_stack.items.len - 1;
-        }
-        if (pos < 0) {
-            self.hide(id);
-            return;
-        }
-
-        const old_pos = self.findLayerIndex(id) orelse unreachable;
-        const new_pos = if (pos == self.layers_stack.items.len - 1) pos - 1 else pos;
-        const layer = self.layers_stack.orderedRemove(old_pos);
-        self.layers_stack.insert(new_pos, layer);
-    }
-
     pub fn deinit(self: *Self) void {
-        for (self.layers_stack.items) |layer| {
-            layer.deinit();
-            self.allocator.free(layer);
+        for (self.windows_stack.items) |*window| {
+            window.deinit();
+            self.allocator.free(window);
         }
-        self.layers_stack.deinit();
+        self.windows_stack.deinit();
     }
 };
-
-/// Layer is a collection of windows.
-/// Layer itself has a infinite size.
-/// When a layer is below another layer, it is not visible.
-pub const Layer = struct {
-    const Self = @This();
-
-    /// Unique ID of the layer.
-    id: usize,
-    /// Origin of the layer.
-    origin: Pos,
-    /// Window on the layer.
-    window: ?*Window,
-    /// Whether the layer is visible.
-    visible: bool = true,
-
-    /// Initialize the layer.
-    /// Caller MUST call deinit() when the layer is no longer needed.
-    pub fn init(id: usize) Self {
-        return Self{
-            .id = id,
-            .origin = .{ .x = 0, .y = 0 },
-            .window = null,
-        };
-    }
-
-    pub fn deinit(self: *Self) void {
-        _ = self; // autofix
-        // TODO: should we deinit the window here?
-    }
-
-    /// Renders the window on the layer.
-    pub fn draw(self: *Self, writer: PixelWriter) void {
-        self.window.drawAt(self.origin, writer);
-    }
-};
-
-test {
-    std.testing.refAllDecls(@This());
-}

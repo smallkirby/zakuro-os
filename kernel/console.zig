@@ -6,6 +6,7 @@ const PixelColor = gfx.PixelColor;
 const std = @import("std");
 const log = std.log.scoped(.console);
 const format = std.fmt.format;
+const Window = gfx.window.Window;
 
 const ConsoleError = error{};
 const ConsoleContext = struct {
@@ -28,7 +29,7 @@ pub const Console = struct {
     const Self = @This();
 
     /// Writer to write to.
-    writer: PixelWriter,
+    window: *Window,
     /// Foreground color.
     fgc: PixelColor,
     /// Background color.
@@ -41,9 +42,9 @@ pub const Console = struct {
     buffer: [kRows][kCols + 1]u8,
 
     /// Initialize a new console with specified fg/bg colors.
-    pub fn new(writer: PixelWriter, fgc: PixelColor, bgc: PixelColor) Self {
+    pub fn new(window: *Window, fgc: PixelColor, bgc: PixelColor) Self {
         return Self{
-            .writer = writer,
+            .window = window,
             .fgc = fgc,
             .bgc = bgc,
             .buffer = std.mem.zeroes([kRows][kCols + 1]u8),
@@ -56,7 +57,7 @@ pub const Console = struct {
             if (c == '\n') {
                 self.newline();
             } else {
-                self.writer.writeAscii(@bitCast(8 * self.cur_col), @bitCast(16 * self.cur_row), c, self.fgc);
+                self.window.writeAscii(@bitCast(8 * self.cur_col), @bitCast(16 * self.cur_row), c, self.fgc);
                 self.buffer[self.cur_row][self.cur_col] = c;
                 self.cur_col += 1;
             }
@@ -79,9 +80,11 @@ pub const Console = struct {
             // Clean the console.
             for (0..16 * kRows) |y| {
                 for (0..8 * kCols) |x| {
-                    self.writer.writePixel(
-                        @intCast(x),
-                        @intCast(y),
+                    self.window.writeAt(
+                        .{
+                            .x = @intCast(x),
+                            .y = @intCast(y),
+                        },
                         self.bgc,
                     );
                 }
@@ -89,7 +92,7 @@ pub const Console = struct {
             // Scroll up.
             for (0..kRows - 1) |row| {
                 @memcpy(&self.buffer[row], &self.buffer[row + 1]);
-                self.writer.writeString(0, @intCast(16 * row), &self.buffer[row], self.fgc);
+                self.window.writeString(.{ .x = 0, .y = @intCast(16 * row) }, &self.buffer[row], self.fgc);
             }
         }
     }
