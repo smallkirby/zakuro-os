@@ -43,12 +43,15 @@ pub const Console = struct {
 
     /// Initialize a new console with specified fg/bg colors.
     pub fn new(window: *Window, fgc: PixelColor, bgc: PixelColor) Self {
-        return Self{
+        var self = Self{
             .window = window,
             .fgc = fgc,
             .bgc = bgc,
             .buffer = std.mem.zeroes([kRows][kCols + 1]u8),
         };
+        self.clear();
+
+        return self;
     }
 
     fn write(context: ConsoleContext, bytes: []const u8) ConsoleError!usize {
@@ -78,21 +81,26 @@ pub const Console = struct {
             self.cur_row += 1;
         } else {
             // Clean the console.
-            for (0..16 * kRows) |y| {
-                for (0..8 * kCols) |x| {
-                    self.window.writeAt(
-                        .{
-                            .x = @intCast(x),
-                            .y = @intCast(y),
-                        },
-                        self.bgc,
-                    );
-                }
-            }
+            self.clear();
             // Scroll up.
             for (0..kRows - 1) |row| {
                 @memcpy(&self.buffer[row], &self.buffer[row + 1]);
                 self.window.writeString(.{ .x = 0, .y = @intCast(16 * row) }, &self.buffer[row], self.fgc);
+            }
+        }
+    }
+
+    /// Clear the console.
+    fn clear(self: *Self) void {
+        for (0..16 * kRows) |y| {
+            for (0..8 * kCols) |x| {
+                self.window.writeAt(
+                    .{
+                        .x = @intCast(x),
+                        .y = @intCast(y),
+                    },
+                    self.bgc,
+                );
             }
         }
     }
