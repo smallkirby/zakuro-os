@@ -24,8 +24,8 @@ pub fn getLayers() *Layers {
 }
 
 /// Initialize the global layered writer.
-pub fn initialize(pixel_writer: PixelWriter, allocator: Allocator) void {
-    layers = Layers.init(pixel_writer, allocator);
+pub fn initialize(pixel_writer: PixelWriter, fb_config: gfx.FrameBufferConfig, allocator: Allocator) void {
+    layers = Layers.init(pixel_writer, fb_config, allocator);
 }
 
 /// Manages a list of windows and their drawing order.
@@ -39,12 +39,14 @@ const Layers = struct {
     windows_stack: WindowList,
 
     allocator: Allocator,
+    fb_config: gfx.FrameBufferConfig,
 
-    pub fn init(writer: PixelWriter, allocator: Allocator) Self {
+    pub fn init(writer: PixelWriter, fb_config: gfx.FrameBufferConfig, allocator: Allocator) Self {
         return Self{
             .writer = writer,
             .windows_stack = WindowList.init(allocator),
             .allocator = allocator,
+            .fb_config = fb_config,
         };
     }
 
@@ -53,6 +55,7 @@ const Layers = struct {
         self.windows_stack.append(try Window.init(
             width,
             height,
+            self.fb_config,
             self.allocator,
         )) catch return Error.NoMemory;
 

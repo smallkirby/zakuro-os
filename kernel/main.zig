@@ -118,7 +118,7 @@ fn main(
 
     // Initialize a pixel writer
     const pixel_writer = graphics.PixelWriter.new(fb_config);
-    gfx.layer.initialize(pixel_writer, gpa);
+    gfx.layer.initialize(pixel_writer, fb_config.*, gpa);
 
     // Initialize graphic layers
     var layers = gfx.layer.getLayers();

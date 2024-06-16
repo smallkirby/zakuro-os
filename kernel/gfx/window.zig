@@ -36,14 +36,27 @@ pub const Window = struct {
     data: [][]gfx.PixelColor,
     /// Memory allocator used to allocate an pixel buffer.
     allocator: Allocator,
+    /// Writer to the shadow buffer of the frame buffer.
+    /// Converting PixelColor to u8 for every pixels in a window every time window is refreshed is too expensive.
+    /// Therefore, we use a shadow buffer and copy the content using memory copy when the window was flushed.
+    /// When the content in a windows is not changed, pixel conversion is not performed.
+    shadow_writer: gfx.PixelWriter,
 
     /// Initialize the window.
     /// Caller MUST ensure to call `deinit` to free the allocated memory.
-    pub fn init(width: u32, height: u32, allocator: Allocator) Error!Self {
+    pub fn init(width: u32, height: u32, fb_config: gfx.FrameBufferConfig, allocator: Allocator) Error!Self {
         var data = allocator.alloc([]gfx.PixelColor, height) catch return Error.NoMemory;
         for (0..height) |y| {
             data[y] = allocator.alloc(gfx.PixelColor, width) catch return Error.NoMemory;
         }
+
+        const shadow_buffer = allocator.alloc(u8, width * height * 4) catch return Error.NoMemory;
+        const config = allocator.create(gfx.FrameBufferConfig) catch return Error.NoMemory;
+        config.frame_buffer = @ptrCast(shadow_buffer.ptr);
+        config.pixel_format = fb_config.pixel_format;
+        config.horizontal_resolution = width;
+        config.vertical_resolution = height;
+        config.pixels_per_scan_line = width;
 
         return Self{
             .width = width,
@@ -51,6 +64,7 @@ pub const Window = struct {
             .data = data,
             .origin = .{ .x = 0, .y = 0 },
             .allocator = allocator,
+            .shadow_writer = gfx.PixelWriter.new(config),
         };
     }
 
@@ -63,23 +77,31 @@ pub const Window = struct {
     /// You have to flush the buffer to the screen.
     pub fn writeAt(self: Self, pos: Pos, color: gfx.PixelColor) void {
         self.data[pos.y][pos.x] = color;
+        self.shadow_writer.writePixel(pos.x, pos.y, color);
     }
 
     /// Draw the buffer in the window at the origin.
     pub fn flush(self: Self, writer: gfx.PixelWriter) void {
-        for (0..self.height) |dy| {
-            for (0..self.width) |dx| {
-                const c = self.at(dx, dy);
-                if (self.transparent_color) |tc| {
+        // If the window is invisible, do nothing.
+        if (!self.visible) return;
+
+        if (self.transparent_color) |tc| {
+            for (0..self.height) |dy| {
+                // If the transparent color is set, flush each pixel one by one.
+                for (0..self.width) |dx| {
+                    const c = self.at(dx, dy);
                     if (gfx.PixelColor.eql(c, tc))
                         continue;
+                    writer.writePixel(
+                        self.origin.x + @as(u32, @truncate(dx)),
+                        self.origin.y + @as(u32, @truncate(dy)),
+                        self.data[dy][dx],
+                    );
                 }
-                writer.writePixel(
-                    self.origin.x + @as(u32, @truncate(dx)),
-                    self.origin.y + @as(u32, @truncate(dy)),
-                    self.data[dy][dx],
-                );
             }
+        } else {
+            // If the transparent color is not set, flush the whole line at once.
+            writer.memcpyFrameBuffer(self.origin, self.shadow_writer);
         }
     }
 

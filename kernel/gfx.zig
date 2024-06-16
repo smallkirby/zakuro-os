@@ -9,6 +9,9 @@ pub const layer = @import("gfx/layer.zig");
 pub const window = @import("gfx/window.zig");
 pub const lib = @import("gfx/lib.zig");
 
+/// Byte size of a pixel.
+pub const bytes_per_pixel = 4;
+
 /// Pixel data format defined by UEFI.
 pub const PixelFormat = enum(u8) {
     PixelRGBResv8BitPerColor,
@@ -68,6 +71,18 @@ pub const PixelWriter = struct {
         );
     }
 
+    /// Copy the memory from one framebuffer to that of this writer.
+    pub fn memcpyFrameBuffer(self: Self, origin: Vector(u32), other: Self) void {
+        const origin_x = origin.x;
+        const origin_y = origin.y;
+
+        for (0..other.config.vertical_resolution) |dy| {
+            const dst = pixelAt(self.config, origin_x, origin_y + @as(u32, @truncate(dy)));
+            const src = pixelAt(other.config, 0, @truncate(dy));
+            @memcpy(dst, src[0 .. other.config.pixels_per_scan_line * bytes_per_pixel]);
+        }
+    }
+
     /// Write a pixel color to the specified position in RGB format.
     fn writePixelRgb(self: Self, x: u32, y: u32, color: PixelColor) void {
         const addr = pixelAt(self.config, x, y);
@@ -86,8 +101,8 @@ pub const PixelWriter = struct {
 
     // Get the address of the framebuffer at the specified pixel.
     /// Note that this function does not perform bounds checking.
-    fn pixelAt(config: *FrameBufferConfig, x: u32, y: u32) [*]u8 {
+    inline fn pixelAt(config: *FrameBufferConfig, x: u32, y: u32) [*]u8 {
         const rel_pos = config.pixels_per_scan_line *| y +| x;
-        return @ptrCast(&config.frame_buffer[rel_pos *| 4]);
+        return @ptrCast(&config.frame_buffer[rel_pos *| bytes_per_pixel]);
     }
 };
