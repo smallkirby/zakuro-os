@@ -23,5 +23,5 @@ zig build
 To run the OS in QEMU:
 
 ```bash
-zig build run -Dprettylog -Dlog_level=debug
+zig build run -Dprettylog -Dlog_level=debug -Doptimize=ReleaseFast
 ```
