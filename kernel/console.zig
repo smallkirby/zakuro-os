@@ -63,8 +63,14 @@ pub const Console = struct {
                 self.window.writeAscii(@bitCast(8 * self.cur_col), @bitCast(16 * self.cur_row), c, self.fgc);
                 self.buffer[self.cur_row][self.cur_col] = c;
                 self.cur_col += 1;
+                // The line exceeds the console width. Go to the next row.
+                if (self.cur_col >= kCols) {
+                    self.newline();
+                }
             }
         }
+        // null-terminate the string.
+        self.buffer[self.cur_row][self.cur_col] = 0;
 
         return bytes.len;
     }
