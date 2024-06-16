@@ -106,14 +106,16 @@ pub const Window = struct {
     }
 
     /// Write an ASCII character to the specified position.
-    pub fn writeAscii(self: Self, x: u32, y: u32, c: u8, color: PixelColor) void {
+    pub fn writeAscii(self: Self, x: u32, y: u32, c: u8, fgc: PixelColor, bgc: PixelColor) void {
         const fonts = font.getFont(c).?;
         for (0..font.FONT_HEIGHT) |dy| {
             for (0..font.FONT_WIDTH) |dx| {
+                const px = @as(u32, @truncate(dx)) + x;
+                const py = @as(u32, @truncate(dy)) + y;
                 if ((fonts[dy] << @truncate(dx)) & 0x80 != 0) {
-                    const px = @as(u32, @truncate(dx)) + x;
-                    const py = @as(u32, @truncate(dy)) + y;
-                    self.writeAt(.{ .x = px, .y = py }, color);
+                    self.writeAt(.{ .x = px, .y = py }, fgc);
+                } else {
+                    self.writeAt(.{ .x = px, .y = py }, bgc);
                 }
             }
         }
@@ -146,7 +148,7 @@ pub const Window = struct {
     }
 
     /// Write a string to the specified position until null character.
-    pub fn writeString(self: Self, pos: Pos, s: []const u8, color: PixelColor) void {
+    pub fn writeString(self: Self, pos: Pos, s: []const u8, fgc: PixelColor, bgc: PixelColor) void {
         var px = pos.x;
         var py = pos.y;
         for (s) |c| {
@@ -155,7 +157,7 @@ pub const Window = struct {
                 px = pos.x;
                 py += @intCast(font.FONT_HEIGHT);
             } else {
-                self.writeAscii(px, py, c, color);
+                self.writeAscii(px, py, c, fgc, bgc);
                 px += @intCast(font.FONT_WIDTH);
             }
         }

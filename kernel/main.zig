@@ -41,6 +41,9 @@ var xhc: drivers.usb.xhc.Controller = undefined;
 /// TODO: Move this to a proper place.
 var intr_queue: FixedSizeQueue(IntrMessage) = undefined;
 
+/// Instance of a console.
+var con: console.Console = undefined;
+
 /// Interrupt message.
 /// The message is queued in the interrupt handler and processed in the main loop.
 /// TODO: Move this to a proper place.
@@ -132,14 +135,12 @@ fn main(
     gfx.lib.drawDock(bgwindow);
 
     // Initialize graphic console
-    var con = console.Console.new(
+    con = console.Console.new(
         bgwindow,
         color.GBFg,
         color.GBBg,
     );
-    for (0..30) |i| {
-        con.print("{d}: {s}\n", .{ i, "Hello from console...!" });
-    }
+    klog.setConsole(&con);
 
     // Initialize graphic mouse cursor
     const mouse_window = try layers.spawnWindow(

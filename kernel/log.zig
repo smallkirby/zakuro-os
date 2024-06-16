@@ -3,17 +3,22 @@
 const std = @import("std");
 const format = std.fmt.format;
 const option = @import("option");
+const stdlog = std.log;
+const io = std.io;
 
 const zakuro = @import("zakuro");
 const Serial = zakuro.serial.Serial;
-const stdlog = std.log;
-const io = std.io;
+const Console = zakuro.console.Console;
 
 const Chameleon = @import("chameleon").Chameleon;
 
 var serial: Serial = undefined;
+var console: ?*Console = null;
 
-const LogError = error{};
+const LogError = error{
+    /// Logging to the graphical console failed.
+    ConsoleError,
+};
 const Writer = std.io.Writer(
     void,
     LogError,
@@ -36,9 +41,24 @@ pub fn init(ser: Serial) void {
     serial = ser;
 }
 
-fn writer_function(context: void, bytes: []const u8) LogError!usize {
-    _ = context;
+/// Set the graphical console.
+/// After calling this function, the logger will use both the serial console and the graphical console.
+pub fn setConsole(con: *Console) void {
+    console = con;
+}
+
+/// Unset the graphical console.
+pub fn unsetConsole() ?*Console {
+    const tmp = console;
+    console = null;
+    return tmp;
+}
+
+fn writer_function(_: void, bytes: []const u8) LogError!usize {
     serial.write_string(bytes);
+    if (console) |con| {
+        _ = Console.write(.{ .console = con }, bytes) catch return LogError.ConsoleError;
+    }
 
     return bytes.len;
 }

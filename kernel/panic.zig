@@ -46,6 +46,7 @@ fn panic(
     _ = ret_addr;
 
     serial = ser.get();
+    _ = zakuro.log.unsetConsole();
     log.err("{s}", .{msg});
 
     if (error_return_trace) |ert| {

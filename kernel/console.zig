@@ -1,15 +1,18 @@
 //! This module provides a graphic console.
 
-const gfx = @import("gfx.zig");
-const PixelWriter = gfx.PixelWriter;
-const PixelColor = gfx.PixelColor;
 const std = @import("std");
 const log = std.log.scoped(.console);
 const format = std.fmt.format;
+
+const zakuro = @import("zakuro");
+const gfx = zakuro.gfx;
+const PixelWriter = gfx.PixelWriter;
+const PixelColor = gfx.PixelColor;
 const Window = gfx.window.Window;
+const colors = zakuro.color;
 
 const ConsoleError = error{};
-const ConsoleContext = struct {
+pub const ConsoleContext = struct {
     console: *Console,
 };
 const ConsoleWriter = std.io.Writer(
@@ -30,16 +33,22 @@ pub const Console = struct {
 
     /// Writer to write to.
     window: *Window,
-    /// Foreground color.
+    /// Default foreground color.
     fgc: PixelColor,
-    /// Background color.
+    /// Default background color.
     bgc: PixelColor,
+    /// Current foreground color.
+    cur_fgc: PixelColor,
+    /// Current background color.
+    cur_bgc: PixelColor,
     /// Cursor column.
     cur_col: u32 = 0,
     /// Cursor row.
     cur_row: u32 = 0,
     /// Console buffer
     buffer: [kRows][kCols + 1]u8,
+    /// Terminal color parser.
+    term_parser: TermParser,
 
     /// Initialize a new console with specified fg/bg colors.
     pub fn new(window: *Window, fgc: PixelColor, bgc: PixelColor) Self {
@@ -47,20 +56,43 @@ pub const Console = struct {
             .window = window,
             .fgc = fgc,
             .bgc = bgc,
+            .cur_fgc = fgc,
+            .cur_bgc = bgc,
             .buffer = std.mem.zeroes([kRows][kCols + 1]u8),
+            .term_parser = TermParser.new(),
         };
         self.clear();
 
         return self;
     }
 
-    fn write(context: ConsoleContext, bytes: []const u8) ConsoleError!usize {
+    // TODO: current implementation strips terminal color codes and saves them to the buffer.
+    //   Therefore, they lose their styles after scrolled up.
+    pub fn write(context: ConsoleContext, bytes: []const u8) ConsoleError!usize {
         const self = context.console;
         for (bytes) |c| {
+            // Parse terminal color codes.
+            if (self.term_parser.parse(c)) |term_color| {
+                switch (term_color) {
+                    .foreground => |fg| self.cur_fgc = fg,
+                    .background => |bg| self.cur_bgc = bg,
+                    .fg_default => self.cur_fgc = self.fgc,
+                    .bg_default => self.cur_bgc = self.bgc,
+                    .parsing => {},
+                }
+                continue;
+            }
+
             if (c == '\n') {
                 self.newline();
             } else {
-                self.window.writeAscii(@bitCast(8 * self.cur_col), @bitCast(16 * self.cur_row), c, self.fgc);
+                self.window.writeAscii(
+                    @bitCast(8 * self.cur_col),
+                    @bitCast(16 * self.cur_row),
+                    c,
+                    self.cur_fgc,
+                    self.cur_bgc,
+                );
                 self.buffer[self.cur_row][self.cur_col] = c;
                 self.cur_col += 1;
                 // The line exceeds the console width. Go to the next row.
@@ -71,6 +103,9 @@ pub const Console = struct {
         }
         // null-terminate the string.
         self.buffer[self.cur_row][self.cur_col] = 0;
+
+        // Flush the console to render.
+        gfx.layer.getLayers().flush();
 
         return bytes.len;
     }
@@ -91,7 +126,12 @@ pub const Console = struct {
             // Scroll up.
             for (0..kRows - 1) |row| {
                 @memcpy(&self.buffer[row], &self.buffer[row + 1]);
-                self.window.writeString(.{ .x = 0, .y = @intCast(16 * row) }, &self.buffer[row], self.fgc);
+                self.window.writeString(
+                    .{ .x = 0, .y = @intCast(16 * row) },
+                    &self.buffer[row],
+                    self.cur_fgc,
+                    self.cur_bgc,
+                );
             }
         }
     }
@@ -105,9 +145,108 @@ pub const Console = struct {
                         .x = @intCast(x),
                         .y = @intCast(y),
                     },
-                    self.bgc,
+                    self.cur_bgc,
                 );
             }
         }
+    }
+};
+
+const TermColorTag = enum {
+    foreground,
+    background,
+    fg_default,
+    bg_default,
+    parsing,
+};
+
+const TermColor = union(TermColorTag) {
+    foreground: PixelColor,
+    background: PixelColor,
+    fg_default: void,
+    bg_default: void,
+    parsing: void,
+};
+
+/// Tiny state machine to parse the terminal color codes.
+/// TODO: make this more generic library.
+const TermParser = struct {
+    const Self = @This();
+
+    /// Color code sequence started.
+    /// True since the last character is '\x1B'.
+    /// Set back to false when the character is '['.
+    started: bool = false,
+    /// Received the '[' character.
+    bracketed: bool = false,
+    /// Ignoring unsupported codes.
+    ignoring: bool = false,
+    /// Color code.
+    code: usize = 0,
+
+    pub fn new() Self {
+        return Self{};
+    }
+
+    /// Parse a character.
+    /// If the character is a special one, this function returns non-null value.
+    pub fn parse(self: *Self, c: u8) ?TermColor {
+        if (self.started) {
+            if (self.bracketed) {
+                switch (c) {
+                    'm' => {
+                        self.started = false;
+                        self.bracketed = false;
+                        const ret = if (self.ignoring) TermColor.parsing else Self.code2color(self.code);
+                        self.code = 0;
+                        self.ignoring = false;
+                        return ret;
+                    },
+                    ';' => {
+                        self.ignoring = true;
+                        return TermColor.parsing;
+                    },
+                    else => {
+                        if (self.ignoring) return TermColor.parsing;
+                        self.code = self.code * 10 + (c - '0');
+                        return TermColor.parsing;
+                    },
+                }
+            } else {
+                self.bracketed = c == '[';
+                return TermColor.parsing;
+            }
+        } else {
+            if (c == 0x1B) {
+                self.started = true;
+                return TermColor.parsing;
+            }
+        }
+
+        return null;
+    }
+
+    fn code2color(code: usize) ?TermColor {
+        return switch (code) {
+            30 => TermColor{ .foreground = colors.Black },
+            31 => TermColor{ .foreground = colors.Red },
+            32 => TermColor{ .foreground = colors.Green },
+            33 => TermColor{ .foreground = colors.Yellow },
+            34 => TermColor{ .foreground = colors.Blue },
+            37 => TermColor{ .foreground = colors.White },
+            39 => TermColor.fg_default,
+
+            40 => TermColor{ .background = colors.Black },
+            41 => TermColor{ .background = colors.Red },
+            42 => TermColor{ .background = colors.Green },
+            43 => TermColor{ .background = colors.Yellow },
+            44 => TermColor{ .background = colors.Blue },
+            47 => TermColor{ .background = colors.White },
+            49 => TermColor.bg_default,
+
+            100 => TermColor{ .background = colors.LightGray },
+
+            else => TermColor.parsing,
+        };
     }
 };
