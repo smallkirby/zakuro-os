@@ -45,8 +45,6 @@ pub const Console = struct {
     cur_col: u32 = 0,
     /// Cursor row.
     cur_row: u32 = 0,
-    /// Console buffer
-    buffer: [kRows][kCols + 1]u8,
     /// Terminal color parser.
     term_parser: TermParser,
 
@@ -58,7 +56,6 @@ pub const Console = struct {
             .bgc = bgc,
             .cur_fgc = fgc,
             .cur_bgc = bgc,
-            .buffer = std.mem.zeroes([kRows][kCols + 1]u8),
             .term_parser = TermParser.new(),
         };
         self.clear();
@@ -93,7 +90,6 @@ pub const Console = struct {
                     self.cur_fgc,
                     self.cur_bgc,
                 );
-                self.buffer[self.cur_row][self.cur_col] = c;
                 self.cur_col += 1;
                 // The line exceeds the console width. Go to the next row.
                 if (self.cur_col >= kCols) {
@@ -101,8 +97,6 @@ pub const Console = struct {
                 }
             }
         }
-        // null-terminate the string.
-        self.buffer[self.cur_row][self.cur_col] = 0;
 
         // Flush the console to render.
         gfx.layer.getLayers().flush();
@@ -112,28 +106,31 @@ pub const Console = struct {
 
     /// Print an ascii message to the console.
     pub fn print(self: *Self, comptime fmt: []const u8, args: anytype) void {
-        format(ConsoleWriter{ .context = .{ .console = self } }, fmt, args) catch unreachable;
+        format(
+            ConsoleWriter{ .context = .{ .console = self } },
+            fmt,
+            args,
+        ) catch unreachable;
     }
 
     fn newline(self: *Self) void {
         self.cur_col = 0;
-
         if (self.cur_row < kRows - 1) {
             self.cur_row += 1;
-        } else {
-            // Clean the console.
-            self.clear();
-            // Scroll up.
-            for (0..kRows - 1) |row| {
-                @memcpy(&self.buffer[row], &self.buffer[row + 1]);
-                self.window.writeString(
-                    .{ .x = 0, .y = @intCast(16 * row) },
-                    &self.buffer[row],
-                    self.cur_fgc,
-                    self.cur_bgc,
-                );
-            }
+            return;
         }
+
+        // Scroll up.
+        self.window.shadow_writer.copyRectangle(
+            .{ .x = 0, .y = 0 },
+            .{ .x = 0, .y = 16 },
+            .{ .x = 8 * kCols, .y = 16 * (kRows - 1) },
+        );
+        self.window.fillRectangle(
+            .{ .x = 0, .y = 16 * (kRows - 1) },
+            .{ .x = 8 * kCols, .y = 16 },
+            self.bgc,
+        );
     }
 
     /// Clear the console.

@@ -70,6 +70,7 @@ pub const Window = struct {
 
     pub fn deinit(self: Self) void {
         self.allocator.free(self.data);
+        self.allocator.free(self.shadow_writer.config.frame_buffer);
     }
 
     /// Write a pixel color at the specified position.

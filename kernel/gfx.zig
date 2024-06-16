@@ -83,6 +83,15 @@ pub const PixelWriter = struct {
         }
     }
 
+    /// Copy a rectangle inside the framebuffer to the specified position.
+    pub fn copyRectangle(self: Self, dst: Vector(u32), src: Vector(u32), size: Vector(u32)) void {
+        for (0..size.y) |dy| {
+            const d = pixelAt(self.config, dst.x, dst.y + @as(u32, @truncate(dy)));
+            const s = pixelAt(self.config, src.x, src.y + @as(u32, @truncate(dy)));
+            @memcpy(d, s[0 .. size.x * bytes_per_pixel]);
+        }
+    }
+
     /// Write a pixel color to the specified position in RGB format.
     fn writePixelRgb(self: Self, x: u32, y: u32, color: PixelColor) void {
         const addr = pixelAt(self.config, x, y);
@@ -99,7 +108,7 @@ pub const PixelWriter = struct {
         addr[2] = color.r;
     }
 
-    // Get the address of the framebuffer at the specified pixel.
+    /// Get the address of the framebuffer at the specified pixel.
     /// Note that this function does not perform bounds checking.
     inline fn pixelAt(config: *FrameBufferConfig, x: u32, y: u32) [*]u8 {
         const rel_pos = config.pixels_per_scan_line *| y +| x;
