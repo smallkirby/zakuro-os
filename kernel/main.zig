@@ -224,6 +224,8 @@ fn main(
         }
     }
 
+    // TODO: We cannot move a mouse cursor until here.
+    //   Users may think the system is frozen while the console output is still working.
     const mouse_observer = cursor.observer();
     zakuro.drivers.usb.cls_mouse.mouse_observer = &mouse_observer;
 
