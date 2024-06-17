@@ -142,7 +142,21 @@ pub const Window = struct {
     pub fn drawRectangle(self: Self, pos: Pos, size: Pos, color: PixelColor) void {
         for (0..size.x) |dx| {
             self.writeAt(
-                .{ .x = size.x + @as(u32, @truncate(dx)), .y = pos.y },
+                .{ .x = pos.x + @as(u32, @truncate(dx)), .y = pos.y },
+                color,
+            );
+            self.writeAt(
+                .{ .x = pos.x + @as(u32, @truncate(dx)), .y = pos.y + (size.y - 1) },
+                color,
+            );
+        }
+        for (0..size.y) |dy| {
+            self.writeAt(
+                .{ .x = pos.x, .y = pos.y + @as(u32, @truncate(dy)) },
+                color,
+            );
+            self.writeAt(
+                .{ .x = pos.x + (size.x - 1), .y = pos.y + @as(u32, @truncate(dy)) },
                 color,
             );
         }
