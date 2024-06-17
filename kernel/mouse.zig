@@ -48,6 +48,8 @@ pub const MouseCursor = struct {
     window: *gfx.window.Window,
     /// Color used to erase the mouse cursor.
     ecolor: gfx.PixelColor,
+    /// Screen size.
+    screen_size: zakuro.Vector(u32),
 
     const Self = @This();
 
@@ -86,10 +88,19 @@ pub const MouseCursor = struct {
 
     /// Move the mouse cursor relative to the current position.
     pub fn moveRel(self: *Self, delta: Vector(i8)) void {
-        //self.eraseMouse();
-        self.window.moveOriginRel(
-            .{ .x = @intCast(delta.x), .y = @intCast(delta.y) },
-        );
+        var x: i32 = @bitCast(self.window.origin.x);
+        var y: i32 = @bitCast(self.window.origin.y);
+        x +|= @intCast(delta.x);
+        y +|= @intCast(delta.y);
+        if (x < 0) x = 0;
+        if (y < 0) y = 0;
+        if (x + 1 >= self.screen_size.x) x = @as(i32, @bitCast(self.screen_size.x)) - 1;
+        if (y + 1 >= self.screen_size.y) y = @as(i32, @bitCast(self.screen_size.y)) - 1;
+        self.window.moveOrigin(.{
+            .x = @bitCast(x),
+            .y = @bitCast(y),
+        });
+
         self.drawMouse();
         gfx.layer.getLayers().flush();
     }

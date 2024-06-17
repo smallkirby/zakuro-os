@@ -152,6 +152,7 @@ fn main(
     var cursor = mouse.MouseCursor{
         .ecolor = color.LightPurple,
         .window = mouse_window,
+        .screen_size = .{ .x = fb_config.horizontal_resolution, .y = fb_config.vertical_resolution },
     };
     cursor.drawMouse();
 
