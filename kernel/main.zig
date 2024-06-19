@@ -159,6 +159,12 @@ fn main(
     // Flush graphic layers to render.
     layers.flush();
 
+    const example_window = try layers.spawnWindow(0x100, 0x90);
+    example_window.moveOrigin(.{ .x = 0x150, .y = 0x1B0 });
+    var example_gfx_win = gfx.lib.GfxWindow.new(example_window);
+    example_gfx_win.init();
+    layers.flush();
+
     // Register PCI devices.
     try pci.registerAllDevices();
     for (0..pci.num_devices) |i| {

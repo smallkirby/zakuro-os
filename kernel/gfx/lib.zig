@@ -38,3 +38,73 @@ pub fn drawDock(window: *Window) void {
         }
     }
 }
+
+pub const GfxWindow = struct {
+    const Self = @This();
+
+    /// Window to draw pixels.
+    window: *Window,
+
+    const close_btn_width = 22;
+    const close_btn_height = 22;
+    const close_btn = [close_btn_height]*const [close_btn_width:0]u8{
+        ".........@@@@.........",
+        ".......@@@@@@@@.......",
+        ".....@@@@@@@@@@@@.....",
+        "....@@@@@@@@@@@@@@....",
+        "...@@@@@@@@@@@@@@@@...",
+        "..@@@@@@@@@@@@@@@@@@..",
+        "..@@@@@@@@@@@@@@@@@@..",
+        ".@@@@@xx@@@@@@xx@@@@@.",
+        "@@@@@@@xx@@@@xx@@@@@@@",
+        "@@@@@@@@xx@@xx@@@@@@@@",
+        "@@@@@@@@@xxxx@@@@@@@@@",
+        "@@@@@@@@@xxxx@@@@@@@@@",
+        "@@@@@@@@xx@@xx@@@@@@@@",
+        "@@@@@@@xx@@@@xx@@@@@@@",
+        ".@@@@@xx@@@@@@xx@@@@@.",
+        "..@@@@@@@@@@@@@@@@@@..",
+        "..@@@@@@@@@@@@@@@@@@..",
+        "...@@@@@@@@@@@@@@@@...",
+        "....@@@@@@@@@@@@@@....",
+        ".....@@@@@@@@@@@@.....",
+        ".......@@@@@@@@.......",
+        ".........@@@@.........",
+    };
+
+    pub fn new(window: *Window) Self {
+        return Self{ .window = window };
+    }
+
+    pub fn init(self: Self) void {
+        self.window.drawRectangle(
+            .{ .x = 0, .y = 0 },
+            .{ .x = self.window.width, .y = self.window.height },
+            .{ .r = 0x22, .g = 0x22, .b = 0x22 },
+        );
+        self.window.fillRectangle(
+            .{ .x = 1, .y = 1 },
+            .{ .x = self.window.width - 2, .y = 0x20 },
+            .{ .r = 0x22, .g = 0x22, .b = 0x22 },
+        );
+
+        const close_btn_offset = zakuro.Vector(u32){ .x = 4, .y = 4 };
+        for (0..close_btn_height) |_y| {
+            const y: u32 = @truncate(_y);
+            for (0..close_btn_width) |_x| {
+                const x: u32 = @truncate(_x);
+                if (close_btn[y][x] == '@') {
+                    self.window.writeAt(
+                        .{ .x = x + close_btn_offset.x, .y = y + close_btn_offset.y },
+                        color.DarkGray,
+                    );
+                } else if (close_btn[y][x] == 'x') {
+                    self.window.writeAt(
+                        .{ .x = x + close_btn_offset.x, .y = y + close_btn_offset.y },
+                        color.LightGray,
+                    );
+                }
+            }
+        }
+    }
+};
