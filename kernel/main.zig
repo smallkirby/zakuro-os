@@ -162,7 +162,8 @@ fn main(
     const example_window = try layers.spawnWindow(0x100, 0x90);
     example_window.moveOrigin(.{ .x = 0x150, .y = 0x1B0 });
     var example_gfx_win = gfx.lib.GfxWindow.new(example_window);
-    example_gfx_win.init();
+    example_gfx_win.init("Zakuro OS");
+    example_gfx_win.writeString(.{ .x = 0, .y = 0 }, "Hello, World...!\n");
     layers.flush();
 
     // Register PCI devices.

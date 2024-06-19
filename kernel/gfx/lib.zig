@@ -4,6 +4,7 @@ const zakuro = @import("zakuro");
 const gfx = zakuro.gfx;
 const color = zakuro.color;
 const Window = gfx.window.Window;
+const Vector = zakuro.Vector;
 
 pub fn drawDesktop(window: *Window) void {
     for (0..window.width) |x| {
@@ -76,7 +77,7 @@ pub const GfxWindow = struct {
         return Self{ .window = window };
     }
 
-    pub fn init(self: Self) void {
+    pub fn init(self: Self, title: [:0]const u8) void {
         self.window.drawRectangle(
             .{ .x = 0, .y = 0 },
             .{ .x = self.window.width, .y = self.window.height },
@@ -88,7 +89,7 @@ pub const GfxWindow = struct {
             .{ .r = 0x22, .g = 0x22, .b = 0x22 },
         );
 
-        const close_btn_offset = zakuro.Vector(u32){ .x = 4, .y = 4 };
+        const close_btn_offset = Vector(u32){ .x = 4, .y = 4 };
         for (0..close_btn_height) |_y| {
             const y: u32 = @truncate(_y);
             for (0..close_btn_width) |_x| {
@@ -106,5 +107,21 @@ pub const GfxWindow = struct {
                 }
             }
         }
+
+        self.window.*.writeString(
+            .{ .x = close_btn_offset.x + close_btn_width + 0x10, .y = close_btn_offset.y + 4 },
+            title,
+            color.White,
+            color.DarkGray,
+        );
+    }
+
+    pub fn writeString(self: Self, pos: Vector(u32), s: []const u8) void {
+        self.window.*.writeString(
+            .{ .x = pos.x + 0x8, .y = pos.y + 0x28 },
+            s,
+            color.DarkGray,
+            .{ .r = 0xAA, .g = 0xAA, .b = 0xAA },
+        );
     }
 };
