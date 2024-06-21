@@ -39,16 +39,34 @@ const Layers = struct {
     windows_stack: WindowList,
     /// Next window ID.
     next_id: usize = 0,
+    /// Writer for a back-buffer.
+    back_writer: PixelWriter,
+    /// Length of the back buffer.
+    back_buffer_size: usize,
 
     allocator: Allocator,
     fb_config: gfx.FrameBufferConfig,
 
     pub fn init(writer: PixelWriter, fb_config: gfx.FrameBufferConfig, allocator: Allocator) Self {
+        const back_buffer = allocator.alloc(u8, fb_config.horizontal_resolution * fb_config.vertical_resolution * gfx.bytes_per_pixel) catch {
+            @panic("Failed to allocate a back buffer for Layers.");
+        };
+        const back_config = allocator.create(gfx.FrameBufferConfig) catch {
+            @panic("Failed to allocate a back buffer for Layers.");
+        };
+        back_config.frame_buffer = @ptrCast(back_buffer);
+        back_config.horizontal_resolution = fb_config.horizontal_resolution;
+        back_config.vertical_resolution = fb_config.vertical_resolution;
+        back_config.pixels_per_scan_line = fb_config.pixels_per_scan_line;
+        back_config.pixel_format = fb_config.pixel_format;
+
         return Self{
             .writer = writer,
             .windows_stack = WindowList.init(allocator),
             .allocator = allocator,
             .fb_config = fb_config,
+            .back_writer = PixelWriter.new(back_config),
+            .back_buffer_size = fb_config.horizontal_resolution * fb_config.vertical_resolution * gfx.bytes_per_pixel,
         };
     }
 
@@ -58,7 +76,7 @@ const Layers = struct {
             self.next_id,
             width,
             height,
-            self.fb_config,
+            self.back_writer.config.*,
             self.allocator,
         )) catch return Error.NoMemory;
         self.next_id += 1;
@@ -66,13 +84,9 @@ const Layers = struct {
         return &self.windows_stack.items[self.windows_stack.items.len - 1];
     }
 
-    /// Draw all windows from the bottom to the top.
+    /// Renders all windows from the bottom to the top.
     pub fn flush(self: *Self) void {
-        for (self.windows_stack.items) |*window| {
-            if (window.visible) {
-                window.flush(self.writer);
-            }
-        }
+        self.flushLayer(&self.windows_stack.items[0]);
     }
 
     /// Renders the specified window layer and all the layers above it.
@@ -84,8 +98,15 @@ const Layers = struct {
                 draw = true;
             }
             if (draw and cur_win.visible) {
-                cur_win.flush(self.writer);
+                cur_win.flush(self.back_writer);
             }
+        }
+
+        if (draw) {
+            @memcpy(
+                self.writer.config.frame_buffer[0..self.back_buffer_size],
+                self.back_writer.config.frame_buffer[0..self.back_buffer_size],
+            );
         }
     }
 
