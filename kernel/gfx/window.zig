@@ -21,6 +21,8 @@ const Error = WindowError;
 pub const Window = struct {
     const Self = @This();
 
+    /// Window ID
+    id: usize,
     /// Width in pixels of this window.
     width: u32,
     /// Height in pixels of this window.
@@ -44,7 +46,13 @@ pub const Window = struct {
 
     /// Initialize the window.
     /// Caller MUST ensure to call `deinit` to free the allocated memory.
-    pub fn init(width: u32, height: u32, fb_config: gfx.FrameBufferConfig, allocator: Allocator) Error!Self {
+    pub fn init(
+        id: usize,
+        width: u32,
+        height: u32,
+        fb_config: gfx.FrameBufferConfig,
+        allocator: Allocator,
+    ) Error!Self {
         var data = allocator.alloc([]gfx.PixelColor, height) catch return Error.NoMemory;
         for (0..height) |y| {
             data[y] = allocator.alloc(gfx.PixelColor, width) catch return Error.NoMemory;
@@ -59,6 +67,7 @@ pub const Window = struct {
         config.pixels_per_scan_line = width;
 
         return Self{
+            .id = id,
             .width = width,
             .height = height,
             .data = data,

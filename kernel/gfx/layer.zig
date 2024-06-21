@@ -37,6 +37,8 @@ const Layers = struct {
     writer: PixelWriter,
     /// List of windows.
     windows_stack: WindowList,
+    /// Next window ID.
+    next_id: usize = 0,
 
     allocator: Allocator,
     fb_config: gfx.FrameBufferConfig,
@@ -53,11 +55,13 @@ const Layers = struct {
     /// Generate a new window.
     pub fn spawnWindow(self: *Self, width: u32, height: u32) Error!*Window {
         self.windows_stack.append(try Window.init(
+            self.next_id,
             width,
             height,
             self.fb_config,
             self.allocator,
         )) catch return Error.NoMemory;
+        self.next_id += 1;
 
         return &self.windows_stack.items[self.windows_stack.items.len - 1];
     }
@@ -67,6 +71,20 @@ const Layers = struct {
         for (self.windows_stack.items) |*window| {
             if (window.visible) {
                 window.flush(self.writer);
+            }
+        }
+    }
+
+    /// Renders the specified window layer and all the layers above it.
+    pub fn flushLayer(self: *Self, window: *Window) void {
+        var draw = false;
+        for (self.windows_stack.items) |*cur_win| {
+            if (cur_win.id == window.id) {
+                if (!cur_win.visible) return;
+                draw = true;
+            }
+            if (draw and cur_win.visible) {
+                cur_win.flush(self.writer);
             }
         }
     }

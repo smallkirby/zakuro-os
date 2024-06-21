@@ -1,4 +1,5 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 
 const zakuro = @import("zakuro");
 const gfx = zakuro.gfx;
@@ -123,5 +124,17 @@ pub const GfxWindow = struct {
             color.DarkGray,
             .{ .r = 0xAA, .g = 0xAA, .b = 0xAA },
         );
+    }
+
+    pub fn writeFormat(
+        self: Self,
+        pos: Vector(u32),
+        allocator: Allocator,
+        comptime fmt: []const u8,
+        args: anytype,
+    ) !void {
+        const s = try std.fmt.allocPrint(allocator, fmt, args);
+        defer allocator.free(s);
+        self.writeString(pos, s);
     }
 };

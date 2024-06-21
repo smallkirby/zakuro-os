@@ -142,6 +142,15 @@ fn main(
     );
     klog.setConsole(&con);
 
+    // Draw example window
+    const example_window = try layers.spawnWindow(0x100, 0x90);
+    example_window.moveOrigin(.{ .x = 0x150, .y = 0x1B0 });
+    var example_gfx_win = gfx.lib.GfxWindow.new(example_window);
+    example_gfx_win.init("Zakuro OS");
+    var example_counter: u64 = 0;
+    try example_gfx_win.writeFormat(.{ .x = 0, .y = 0 }, gpa, "{}\n", .{example_counter});
+    layers.flush();
+
     // Initialize graphic mouse cursor
     const mouse_window = try layers.spawnWindow(
         mouse.mouse_cursor_width,
@@ -157,13 +166,6 @@ fn main(
     cursor.drawMouse();
 
     // Flush graphic layers to render.
-    layers.flush();
-
-    const example_window = try layers.spawnWindow(0x100, 0x90);
-    example_window.moveOrigin(.{ .x = 0x150, .y = 0x1B0 });
-    var example_gfx_win = gfx.lib.GfxWindow.new(example_window);
-    example_gfx_win.init("Zakuro OS");
-    example_gfx_win.writeString(.{ .x = 0, .y = 0 }, "Hello, World...!\n");
     layers.flush();
 
     // Register PCI devices.
@@ -239,12 +241,15 @@ fn main(
 
     // Loop to process interrupt messages
     while (true) {
+        example_counter += 1;
+        try example_gfx_win.writeFormat(.{ .x = 0, .y = 0 }, gpa, "{}\n", .{example_counter});
+        layers.flushLayer(example_window);
+
         // Check if there is any interrupt message
         arch.disableIntr();
         {
             if (intr_queue.len == 0) {
                 arch.enableIntr();
-                arch.halt();
                 continue;
             }
         }
