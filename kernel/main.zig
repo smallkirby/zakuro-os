@@ -2,12 +2,13 @@
 
 const std = @import("std");
 const log = std.log.scoped(.main);
+const Allocator = std.mem.Allocator;
 
 const zakuro = @import("zakuro");
 const console = zakuro.console;
 const klog = zakuro.log;
 const ser = zakuro.serial;
-const graphics = zakuro.gfx;
+const gfx = zakuro.gfx;
 const color = zakuro.color;
 const pci = zakuro.pci;
 const drivers = zakuro.drivers;
@@ -19,7 +20,6 @@ const mm = zakuro.mm;
 const MemoryMap = mm.uefi.MemoryMap;
 const BitmapPageAllocator = mm.BitmapPageAllocator;
 const SlubAllocator = mm.SlubAllocator;
-const gfx = zakuro.gfx;
 
 /// Override panic impl
 pub const panic = @import("panic.zig").panic_fn;
@@ -66,11 +66,13 @@ export fn kernel_entry() callconv(.Naked) noreturn {
     );
 }
 
-/// Kernel Zig entry point called from UEFI via kernel_entry.
-/// The bootloader is a UEFI app using MS x64 calling convention,
+/// Zig's kernel entry point.
+/// This function is called from `kernel_entry` and runs on the kernel stack.
+/// `kernel_entry` is called by UEFI bootloader,
+/// which is a UEFI app using MS x64 calling convention,
 /// so we need to use the same calling convention here.
 export fn kernel_main(
-    fb_config: *graphics.FrameBufferConfig,
+    fb_config: *gfx.FrameBufferConfig,
     memory_map: *MemoryMap,
 ) callconv(.Win64) noreturn {
     // This function runs on the new kernel stack,
@@ -89,8 +91,9 @@ export fn kernel_main(
     unreachable;
 }
 
+/// Kernel main function using Zig's calling convention.
 fn main(
-    fb_config: *graphics.FrameBufferConfig,
+    fb_config: *gfx.FrameBufferConfig,
     memory_map: *MemoryMap,
 ) !void {
     const serial = ser.init();
@@ -118,9 +121,10 @@ fn main(
 
     // Initialize interrupt queue
     intr_queue = try FixedSizeQueue(IntrMessage).init(16, gpa);
+    intr.registerHandler(mouse.intr_vector, &mouseHandler);
 
     // Initialize a pixel writer
-    const pixel_writer = graphics.PixelWriter.new(fb_config);
+    const pixel_writer = gfx.PixelWriter.new(fb_config);
     gfx.layer.initialize(pixel_writer, fb_config.*, gpa);
 
     // Initialize graphic layers
@@ -152,24 +156,46 @@ fn main(
     try example_gfx_win.writeFormat(.{ .x = 0, .y = 0 }, gpa, "{}\n", .{example_counter});
     layers.flush();
 
-    // Initialize graphic mouse cursor
-    const mouse_window = try layers.spawnWindow(
-        mouse.mouse_cursor_width,
-        mouse.mouse_cursor_height,
-        false,
-    );
-    mouse_window.moveOrigin(.{ .x = 0x100, .y = 0x100 });
-    mouse_window.transparent_color = mouse.mouse_transparent_color;
-    var cursor = mouse.MouseCursor{
-        .ecolor = color.LightPurple,
-        .window = mouse_window,
-        .screen_size = .{ .x = fb_config.horizontal_resolution, .y = fb_config.vertical_resolution },
-    };
-    cursor.drawMouse();
+    // Initialize PCI devices.
+    try initPci(gpa);
 
-    // Flush graphic layers to render.
+    // Initialize mouse cursor
+    try initMouseCursor(fb_config, gpa);
     layers.flush();
 
+    // Loop to process interrupt messages
+    while (true) {
+        example_counter += 1;
+        try example_gfx_win.writeFormat(.{ .x = 0, .y = 0 }, gpa, "{}\n", .{example_counter});
+        layers.flushLayer(example_window);
+
+        // Check if there is any interrupt message
+        arch.disableIntr();
+        {
+            if (intr_queue.len == 0) {
+                arch.enableIntr();
+                continue;
+            }
+        }
+        arch.enableIntr();
+
+        // Process the message
+        if (intr_queue.pop()) |msg| {
+            switch (msg.typ) {
+                .Mouse => handleMouseMessage(),
+            }
+        }
+    }
+
+    // EOL
+    log.info("Reached end of kernel. Halting...", .{});
+    while (true) {
+        arch.halt();
+    }
+}
+
+/// Register PCI devices and initialize xHC controller.
+fn initPci(allocator: Allocator) !void {
     // Register PCI devices.
     try pci.registerAllDevices();
     for (0..pci.num_devices) |i| {
@@ -202,7 +228,6 @@ fn main(
         }
     }
     const xhc_dev = xhc_maybe orelse @panic("xHC controller not found.");
-    intr.registerHandler(mouse.intr_vector, &mouseHandler);
     try xhc_dev.configureMsi(
         .{ .dest_id = arch.getBspLapicId() },
         .{ .vector = mouse.intr_vector, .assert = true },
@@ -215,10 +240,10 @@ fn main(
     log.info("xHC MMIO base: 0x{X}", .{xhc_mmio_base});
 
     // TODO: identity map for MMIO base in case it exceeds 16GiB.
-    try arch.page.mapIdentity(xhc_mmio_base, gpa);
+    try arch.page.mapIdentity(xhc_mmio_base, allocator);
 
     // Initialize xHC controller.
-    xhc = drivers.usb.xhc.Controller.new(xhc_mmio_base, gpa);
+    xhc = drivers.usb.xhc.Controller.new(xhc_mmio_base, allocator);
     try xhc.init();
     xhc.run();
     log.info("Started xHC controller.", .{});
@@ -235,41 +260,32 @@ fn main(
             log.info("Reset of port {d} completed.", .{i});
         }
     }
+}
 
-    // TODO: We cannot move a mouse cursor until here.
-    //   Users may think the system is frozen while the console output is still working.
-    const mouse_observer = cursor.observer();
-    zakuro.drivers.usb.cls_mouse.mouse_observer = &mouse_observer;
+/// Initialize mouse cursor and registers mouse movement observer.
+fn initMouseCursor(fb_config: *gfx.FrameBufferConfig, allocator: Allocator) !void {
+    const layers = gfx.layer.getLayers();
 
-    // Loop to process interrupt messages
-    while (true) {
-        example_counter += 1;
-        try example_gfx_win.writeFormat(.{ .x = 0, .y = 0 }, gpa, "{}\n", .{example_counter});
-        layers.flushLayer(example_window);
+    // Initialize graphic mouse cursor
+    const mouse_window = try layers.spawnWindow(
+        mouse.mouse_cursor_width,
+        mouse.mouse_cursor_height,
+        false,
+    );
+    mouse_window.moveOrigin(.{ .x = 0x100, .y = 0x100 });
+    mouse_window.transparent_color = mouse.mouse_transparent_color;
 
-        // Check if there is any interrupt message
-        arch.disableIntr();
-        {
-            if (intr_queue.len == 0) {
-                arch.enableIntr();
-                continue;
-            }
-        }
-        arch.enableIntr();
+    var cursor = try allocator.create(mouse.MouseCursor);
+    cursor.* = mouse.MouseCursor{
+        .ecolor = color.LightPurple,
+        .window = mouse_window,
+        .screen_size = .{ .x = fb_config.horizontal_resolution, .y = fb_config.vertical_resolution },
+    };
+    cursor.drawMouse();
 
-        // Process the message
-        if (intr_queue.pop()) |msg| {
-            switch (msg.typ) {
-                .Mouse => handleMouseMessage(),
-            }
-        }
-    }
-
-    // EOL
-    log.info("Reached end of kernel. Halting...", .{});
-    while (true) {
-        arch.halt();
-    }
+    // Register mouse movement observer
+    const mouse_observer = try cursor.observer(allocator);
+    zakuro.drivers.usb.cls_mouse.mouse_observer = mouse_observer;
 }
 
 // TODO: Move this to a proper place.

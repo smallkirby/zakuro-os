@@ -2,6 +2,8 @@
 
 const std = @import("std");
 const log = std.log.scoped(.mouse);
+const Allocator = std.mem.Allocator;
+
 const zakuro = @import("zakuro");
 const gfx = zakuro.gfx;
 const Vector = zakuro.Vector;
@@ -63,13 +65,16 @@ pub const MouseCursor = struct {
     const Self = @This();
 
     /// Get a mouse observer for the mouse movement.
-    pub fn observer(self: *Self) MouseObserver {
-        return .{
+    pub fn observer(self: *Self, allocator: Allocator) !*MouseObserver {
+        const ret = try allocator.create(MouseObserver);
+        ret.* = .{
             .ptr = self,
             .vtable = .{
                 .onMove = vtMoveRel,
             },
         };
+
+        return ret;
     }
 
     fn vtMoveRel(ctx: *anyopaque, btn: u8, delta_x: i8, delta_y: i8) void {
