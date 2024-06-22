@@ -1,8 +1,8 @@
 //! This module provides a simple set of ascii fonts
 //! each of which consists of 16x8 pixels.
 
-pub const FONT_HEIGHT: usize = 16;
-pub const FONT_WIDTH: usize = 8;
+pub const font_height: usize = 16;
+pub const font_width: usize = 8;
 
 const fonts = @extern(*[0x100][16]u8, .{
     .name = "_binary_fontdata_start",

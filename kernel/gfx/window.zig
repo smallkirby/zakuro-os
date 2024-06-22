@@ -122,8 +122,8 @@ pub const Window = struct {
     /// Write an ASCII character to the specified position.
     pub fn writeAscii(self: Self, x: u32, y: u32, c: u8, fgc: PixelColor, bgc: PixelColor) void {
         const fonts = font.getFont(c).?;
-        for (0..font.FONT_HEIGHT) |dy| {
-            for (0..font.FONT_WIDTH) |dx| {
+        for (0..font.font_height) |dy| {
+            for (0..font.font_width) |dx| {
                 const px = @as(u32, @truncate(dx)) + x;
                 const py = @as(u32, @truncate(dy)) + y;
                 if ((fonts[dy] << @truncate(dx)) & 0x80 != 0) {
@@ -183,10 +183,10 @@ pub const Window = struct {
             if (c == 0) break;
             if (c == '\n') {
                 px = pos.x;
-                py += @intCast(font.FONT_HEIGHT);
+                py += @intCast(font.font_height);
             } else {
                 self.writeAscii(px, py, c, fgc, bgc);
-                px += @intCast(font.FONT_WIDTH);
+                px += @intCast(font.font_width);
             }
         }
     }
