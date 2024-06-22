@@ -34,10 +34,11 @@ pub const MouseDriver = struct {
     fn onDataReceived(ctx: *anyopaque, buf: []u8) void {
         _ = ctx;
 
+        const btn: u8 = buf[0];
         const displacement_x: i8 = @bitCast(buf[1]);
         const displacement_y: i8 = @bitCast(buf[2]);
         if (mouse_observer) |observer| {
-            observer.onMove(displacement_x, displacement_y);
+            observer.onMove(btn, displacement_x, displacement_y);
         }
     }
 };
@@ -53,10 +54,10 @@ pub const MouseObserver = struct {
     const Self = @This();
     const VTable = struct {
         /// Called when the mouse moves.
-        onMove: *const fn (*anyopaque, i8, i8) void,
+        onMove: *const fn (*anyopaque, u8, i8, i8) void,
     };
 
-    pub fn onMove(self: *const Self, displacement_x: i8, displacement_y: i8) void {
-        self.vtable.onMove(self.ptr, displacement_x, displacement_y);
+    pub fn onMove(self: *const Self, btn: u8, displacement_x: i8, displacement_y: i8) void {
+        self.vtable.onMove(self.ptr, btn, displacement_x, displacement_y);
     }
 };

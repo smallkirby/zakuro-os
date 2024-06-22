@@ -50,6 +50,13 @@ pub const MouseCursor = struct {
     ecolor: gfx.PixelColor,
     /// Screen size.
     screen_size: zakuro.Vector(u32),
+    /// Previous button state.
+    prev_btn: ButtonState = std.mem.zeroInit(ButtonState, .{}),
+
+    /// Main color of the mouse cursor.
+    mainc: gfx.PixelColor = colors.Black,
+    /// Frame color of the mouse cursor.
+    framec: gfx.PixelColor = colors.White,
 
     const Self = @This();
 
@@ -63,9 +70,12 @@ pub const MouseCursor = struct {
         };
     }
 
-    fn vtMoveRel(ctx: *anyopaque, delta_x: i8, delta_y: i8) void {
+    fn vtMoveRel(ctx: *anyopaque, btn: u8, delta_x: i8, delta_y: i8) void {
         const self: *Self = @alignCast(@ptrCast(ctx));
-        self.moveRel(.{ .x = delta_x, .y = delta_y });
+        self.moveRel(
+            @bitCast(btn),
+            .{ .x = delta_x, .y = delta_y },
+        );
     }
 
     /// Draw a mouse cursor at the specified position.
@@ -73,8 +83,8 @@ pub const MouseCursor = struct {
         for (0..mouse_cursor_height) |y| {
             for (0..mouse_cursor_width) |x| {
                 const color = switch (mouse_shape[y][x]) {
-                    '@' => colors.Black,
-                    '.' => colors.White,
+                    '@' => self.mainc,
+                    '.' => self.framec,
                     ' ' => mouse_transparent_color,
                     else => unreachable,
                 };
@@ -87,7 +97,7 @@ pub const MouseCursor = struct {
     }
 
     /// Move the mouse cursor relative to the current position.
-    pub fn moveRel(self: *Self, delta: Vector(i8)) void {
+    pub fn moveRel(self: *Self, btn: ButtonState, delta: Vector(i8)) void {
         var x: i32 = @bitCast(self.window.origin.x);
         var y: i32 = @bitCast(self.window.origin.y);
         x +|= @intCast(delta.x);
@@ -101,6 +111,15 @@ pub const MouseCursor = struct {
             .y = @bitCast(y),
         });
 
+        const prev_left_pressed = self.prev_btn.left_pressed;
+        if (!prev_left_pressed and btn.left_pressed) {
+            self.framec = colors.Red;
+        }
+        if (prev_left_pressed and !btn.left_pressed) {
+            self.framec = colors.White;
+        }
+
+        self.prev_btn = btn;
         self.drawMouse();
         gfx.layer.getLayers().flush();
     }
@@ -120,4 +139,10 @@ pub const MouseCursor = struct {
             }
         }
     }
+};
+
+const ButtonState = packed struct(u8) {
+    left_pressed: bool,
+    right_pressed: bool,
+    _reserved: u6,
 };
