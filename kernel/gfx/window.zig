@@ -34,6 +34,8 @@ pub const Window = struct {
     transparent_color: ?gfx.PixelColor = null,
     /// Visibility of this window.
     visible: bool = true,
+    /// When true, the window can be dragged by the mouse.
+    draggable: bool,
     /// Pixel data of this window.
     data: [][]gfx.PixelColor,
     /// Memory allocator used to allocate an pixel buffer.
@@ -50,6 +52,7 @@ pub const Window = struct {
         id: usize,
         width: u32,
         height: u32,
+        draggable: bool,
         fb_config: gfx.FrameBufferConfig,
         allocator: Allocator,
     ) Error!Self {
@@ -72,6 +75,7 @@ pub const Window = struct {
             .height = height,
             .data = data,
             .origin = .{ .x = 0, .y = 0 },
+            .draggable = draggable,
             .allocator = allocator,
             .shadow_writer = gfx.PixelWriter.new(config),
         };

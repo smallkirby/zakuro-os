@@ -52,6 +52,8 @@ pub const MouseCursor = struct {
     screen_size: zakuro.Vector(u32),
     /// Previous button state.
     prev_btn: ButtonState = std.mem.zeroInit(ButtonState, .{}),
+    /// Window that is being dragged.
+    win_in_drag: ?*gfx.window.Window = null,
 
     /// Main color of the mouse cursor.
     mainc: gfx.PixelColor = colors.Black,
@@ -98,6 +100,7 @@ pub const MouseCursor = struct {
 
     /// Move the mouse cursor relative to the current position.
     pub fn moveRel(self: *Self, btn: ButtonState, delta: Vector(i8)) void {
+        // Move mouse window.
         var x: i32 = @bitCast(self.window.origin.x);
         var y: i32 = @bitCast(self.window.origin.y);
         x +|= @intCast(delta.x);
@@ -111,14 +114,26 @@ pub const MouseCursor = struct {
             .y = @bitCast(y),
         });
 
+        // Drag window on click.
         const prev_left_pressed = self.prev_btn.left_pressed;
         if (!prev_left_pressed and btn.left_pressed) {
             self.framec = colors.Red;
-        }
-        if (prev_left_pressed and !btn.left_pressed) {
+            if (getLayers.findLayerByPosition(self.window.origin, self.window.id)) |window| {
+                self.win_in_drag = window;
+            }
+        } else if (self.prev_btn.left_pressed and btn.left_pressed) {
+            if (self.win_in_drag) |window| {
+                window.moveOriginRel(.{
+                    .x = @intCast(delta.x),
+                    .y = @intCast(delta.y),
+                });
+            }
+        } else if (prev_left_pressed and !btn.left_pressed) {
             self.framec = colors.White;
+            self.win_in_drag = null;
         }
 
+        // Flush the mouse.
         self.prev_btn = btn;
         self.drawMouse();
         gfx.layer.getLayers().flush();

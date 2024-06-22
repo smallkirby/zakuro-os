@@ -128,6 +128,7 @@ fn main(
     const bgwindow = try layers.spawnWindow(
         fb_config.horizontal_resolution,
         fb_config.vertical_resolution,
+        false,
     );
 
     // Draw desktop and dock bar.
@@ -143,7 +144,7 @@ fn main(
     klog.setConsole(&con);
 
     // Draw example window
-    const example_window = try layers.spawnWindow(0x100, 0x90);
+    const example_window = try layers.spawnWindow(0x100, 0x90, true);
     example_window.moveOrigin(.{ .x = 0x150, .y = 0x1B0 });
     var example_gfx_win = gfx.lib.GfxWindow.new(example_window);
     example_gfx_win.init("Zakuro OS");
@@ -155,6 +156,7 @@ fn main(
     const mouse_window = try layers.spawnWindow(
         mouse.mouse_cursor_width,
         mouse.mouse_cursor_height,
+        false,
     );
     mouse_window.moveOrigin(.{ .x = 0x100, .y = 0x100 });
     mouse_window.transparent_color = mouse.mouse_transparent_color;

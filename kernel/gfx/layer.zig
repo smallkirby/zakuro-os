@@ -71,11 +71,12 @@ const Layers = struct {
     }
 
     /// Generate a new window.
-    pub fn spawnWindow(self: *Self, width: u32, height: u32) Error!*Window {
+    pub fn spawnWindow(self: *Self, width: u32, height: u32, draggable: bool) Error!*Window {
         self.windows_stack.append(try Window.init(
             self.next_id,
             width,
             height,
+            draggable,
             self.back_writer.config.*,
             self.allocator,
         )) catch return Error.NoMemory;
@@ -108,6 +109,23 @@ const Layers = struct {
                 self.back_writer.config.frame_buffer[0..self.back_buffer_size],
             );
         }
+    }
+
+    /// Get a visible window that contains the specified position.
+    pub fn findLayerByPosition(self: *Self, pos: Pos, excluded_id: usize) ?*Window {
+        var id = self.windows_stack.items.len - 1;
+        while (id >= 0) : (id -= 1) {
+            const window = &self.windows_stack.items[id];
+            if (window.visible and window.id != excluded_id) {
+                if (!window.draggable) return null;
+                if (window.origin.x <= pos.x and pos.x < window.origin.x + window.width and
+                    window.origin.y <= pos.y and pos.y < window.origin.y + window.height)
+                {
+                    return window;
+                }
+            }
+        }
+        return null;
     }
 
     pub fn deinit(self: *Self) void {
