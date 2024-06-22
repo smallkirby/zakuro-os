@@ -17,6 +17,7 @@ const arch = zakuro.arch;
 const intr = zakuro.arch.intr;
 const FixedSizeQueue = zakuro.lib.queue.FixedSizeQueue;
 const mm = zakuro.mm;
+const Timer = zakuro.Timer;
 const MemoryMap = mm.uefi.MemoryMap;
 const BitmapPageAllocator = mm.BitmapPageAllocator;
 const SlubAllocator = mm.SlubAllocator;
@@ -43,6 +44,9 @@ var intr_queue: FixedSizeQueue(IntrMessage) = undefined;
 
 /// Instance of a console.
 var con: console.Console = undefined;
+
+/// Timer instance.
+var timer: *Timer = undefined;
 
 /// Interrupt message.
 /// The message is queued in the interrupt handler and processed in the main loop.
@@ -100,7 +104,7 @@ fn main(
     klog.init(serial);
 
     log.info("Booting Zakuro OS...", .{});
-    log.info("BSP LAPIC ID: {d}", .{arch.getBspLapicId()});
+    log.info("BSP LAPIC ID: {d}", .{arch.getLapicId()});
 
     // Initialize IDT
     intr.init();
@@ -121,7 +125,7 @@ fn main(
 
     // Initialize interrupt queue
     intr_queue = try FixedSizeQueue(IntrMessage).init(16, gpa);
-    intr.registerHandler(mouse.intr_vector, &mouseHandler);
+    intr.registerHandler(intr.mouse_interrupt, &mouseHandler);
 
     // Initialize a pixel writer
     const pixel_writer = gfx.PixelWriter.new(fb_config);
@@ -156,6 +160,10 @@ fn main(
     try example_gfx_win.writeFormat(.{ .x = 0, .y = 0 }, gpa, "{}\n", .{example_counter});
     layers.flush();
 
+    // Initialize local APIC timer.
+    intr.registerHandler(intr.timer_interrupt, &timerHandler);
+    timer = try Timer.init(intr.timer_interrupt, gpa);
+
     // Initialize PCI devices.
     try initPci(gpa);
 
@@ -165,7 +173,10 @@ fn main(
 
     // Loop to process interrupt messages
     while (true) {
-        example_counter += 1;
+        arch.disableIntr();
+        example_counter = timer.total_tick;
+        arch.enableIntr();
+
         try example_gfx_win.writeFormat(.{ .x = 0, .y = 0 }, gpa, "{}\n", .{example_counter});
         layers.flushLayer(example_window);
 
@@ -174,6 +185,7 @@ fn main(
         {
             if (intr_queue.len == 0) {
                 arch.enableIntr();
+                arch.halt();
                 continue;
             }
         }
@@ -229,8 +241,8 @@ fn initPci(allocator: Allocator) !void {
     }
     const xhc_dev = xhc_maybe orelse @panic("xHC controller not found.");
     try xhc_dev.configureMsi(
-        .{ .dest_id = arch.getBspLapicId() },
-        .{ .vector = mouse.intr_vector, .assert = true },
+        .{ .dest_id = arch.getLapicId() },
+        .{ .vector = intr.mouse_interrupt, .assert = true },
         0,
     );
 
@@ -293,7 +305,12 @@ fn mouseHandler(_: *intr.Context) void {
     intr_queue.push(.{ .typ = .Mouse }) catch |err| {
         log.err("Failed to push mouse event to the queue: {?}", .{err});
     };
-    intr.notifyEoi();
+    arch.notifyEoi();
+}
+
+fn timerHandler(_: *intr.Context) void {
+    timer.tick();
+    arch.notifyEoi();
 }
 
 // TODO: Move this to a proper place.

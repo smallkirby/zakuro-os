@@ -69,12 +69,6 @@ pub fn init() void {
     asm volatile ("sti");
 }
 
-/// Notify the LAPIC that the interrupt has been handled.
-pub fn notifyEoi() void {
-    const eoi: *volatile u32 = @ptrFromInt(0xFEE000B0);
-    eoi.* = 0;
-}
-
 /// Register interrupt handler.
 pub fn registerHandler(comptime vector: u8, handler: Handler) void {
     handlers[vector] = handler;
@@ -138,6 +132,7 @@ fn unhandledFaultHandler(context: *Context) void {
     unhandledHandler(context);
 }
 
+// Exception vectors.
 const divideByZero = 0;
 const debug = 1;
 const nonMaskableInterrupt = 2;
@@ -161,6 +156,10 @@ const virtualizationException = 20;
 const controlProtectionExcepton = 21;
 
 const num_system_exceptions = 32;
+
+// User-defined interrupt vectors.
+pub const mouse_interrupt = 0x30;
+pub const timer_interrupt = 0x31;
 
 /// Get the name of an exception.
 pub inline fn exceptionName(vector: u64) []const u8 {

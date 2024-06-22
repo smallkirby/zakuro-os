@@ -6,8 +6,10 @@ pub const intr = @import("interrupt.zig");
 pub const msi = @import("msi.zig");
 pub const gdt = @import("gdt.zig");
 pub const page = @import("page.zig");
+pub const timer = @import("timer.zig");
 
 const am = @import("asm.zig");
+const apic = @import("apic.zig");
 
 /// Page size.
 pub const page_size: usize = 4096;
@@ -16,14 +18,12 @@ pub const page_shift: usize = 12;
 /// Page mask.
 pub const page_mask: usize = page_size - 1;
 
+pub const getLapicId = apic.getLapicId;
+pub const notifyEoi = apic.notifyEoi;
+
 /// Pause a CPU for a short period of time.
 pub fn relax() void {
     am.relax();
-}
-
-/// Get a BSP(Bootstrap Processor) Local APIC ID.
-pub fn getBspLapicId() u8 {
-    return @truncate(@as(*u32, @ptrFromInt(0x0FEE_0020)).* >> 24);
 }
 
 /// Disable interrupts.
