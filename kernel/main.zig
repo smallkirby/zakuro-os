@@ -17,7 +17,8 @@ const arch = zakuro.arch;
 const intr = zakuro.arch.intr;
 const FixedSizeQueue = zakuro.lib.queue.FixedSizeQueue;
 const mm = zakuro.mm;
-const Timer = zakuro.Timer;
+const timer = zakuro.timer;
+const event = zakuro.event;
 const MemoryMap = mm.uefi.MemoryMap;
 const BitmapPageAllocator = mm.BitmapPageAllocator;
 const SlubAllocator = mm.SlubAllocator;
@@ -38,26 +39,9 @@ var bpa_buf: [@sizeOf(BitmapPageAllocator)]u8 align(4096) = [_]u8{0} ** @sizeOf(
 /// xHC controller.
 /// TODO: Move this to a proper place.
 var xhc: drivers.usb.xhc.Controller = undefined;
-/// Interrupt queue.
-/// TODO: Move this to a proper place.
-var intr_queue: FixedSizeQueue(IntrMessage) = undefined;
 
 /// Instance of a console.
 var con: console.Console = undefined;
-
-/// Timer instance.
-var timer: *Timer = undefined;
-
-/// Interrupt message.
-/// The message is queued in the interrupt handler and processed in the main loop.
-/// TODO: Move this to a proper place.
-const IntrMessage = struct {
-    /// Type of the message.
-    typ: enum {
-        /// Mouse event.
-        Mouse,
-    },
-};
 
 /// Kernel entry point called from the bootloader.
 /// This function switches to the kernel stack and calls `kernel_main`.
@@ -124,7 +108,7 @@ fn main(
     try arch.page.initIdentityMapping(page_allocator);
 
     // Initialize interrupt queue
-    intr_queue = try FixedSizeQueue(IntrMessage).init(16, gpa);
+    try event.init(16, gpa);
     intr.registerHandler(intr.mouse_interrupt, &mouseHandler);
 
     // Initialize a pixel writer
@@ -162,7 +146,7 @@ fn main(
 
     // Initialize local APIC timer.
     intr.registerHandler(intr.timer_interrupt, &timerHandler);
-    timer = try Timer.init(intr.timer_interrupt, gpa);
+    timer.init(intr.timer_interrupt, gpa);
 
     // Initialize PCI devices.
     try initPci(gpa);
@@ -171,19 +155,23 @@ fn main(
     try initMouseCursor(fb_config, gpa);
     layers.flush();
 
+    // Set example timers
+    try timer.newTimer(200, 0);
+    try timer.newTimer(300, 1);
+
     // Loop to process interrupt messages
     while (true) {
         arch.disableIntr();
-        example_counter = timer.total_tick;
+        example_counter = timer.getTicks();
         arch.enableIntr();
 
         try example_gfx_win.writeFormat(.{ .x = 0, .y = 0 }, gpa, "{}\n", .{example_counter});
         layers.flushLayer(example_window);
 
-        // Check if there is any interrupt message
+        // Check if there is any queued events.
         arch.disableIntr();
         {
-            if (intr_queue.len == 0) {
+            if (event.size() == 0) {
                 arch.enableIntr();
                 arch.halt();
                 continue;
@@ -192,9 +180,10 @@ fn main(
         arch.enableIntr();
 
         // Process the message
-        if (intr_queue.pop()) |msg| {
-            switch (msg.typ) {
-                .Mouse => handleMouseMessage(),
+        if (event.pop()) |msg| {
+            switch (msg) {
+                .mouse => handleMouseMessage(),
+                .timer => |t| log.info("Timer Event: ID={d}", .{t.id}),
             }
         }
     }
@@ -302,7 +291,7 @@ fn initMouseCursor(fb_config: *gfx.FrameBufferConfig, allocator: Allocator) !voi
 
 // TODO: Move this to a proper place.
 fn mouseHandler(_: *intr.Context) void {
-    intr_queue.push(.{ .typ = .Mouse }) catch |err| {
+    event.push(.mouse) catch |err| {
         log.err("Failed to push mouse event to the queue: {?}", .{err});
     };
     arch.notifyEoi();
