@@ -319,11 +319,20 @@ EFI_STATUS EFIAPI UefiMain(EFI_HANDLE image_handle,
       Halt();
   }
 
+  VOID *acpi_table = NULL;
+  for (UINTN i = 0; i < system_table->NumberOfTableEntries; ++i) {
+    if (CompareGuid(&gEfiAcpiTableGuid,
+                    &system_table->ConfigurationTable[i].VendorGuid)) {
+      acpi_table = system_table->ConfigurationTable[i].VendorTable;
+      break;
+    }
+  }
+
 #define ELF_OFFSET_TO_ENTRYPOINT 24
   typedef void EntryPointType(const struct FrameBufferConfig *,
-                              const struct MemoryMap *);
+                              const struct MemoryMap *, const VOID *);
   UINT64 entry_addr = *(UINT64 *)(kernel_first_addr + ELF_OFFSET_TO_ENTRYPOINT);
-  ((EntryPointType *)entry_addr)(&config, &memmap);
+  ((EntryPointType *)entry_addr)(&config, &memmap, acpi_table);
 
   // unreachable
 

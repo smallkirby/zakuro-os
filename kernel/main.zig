@@ -17,6 +17,7 @@ const arch = zakuro.arch;
 const intr = zakuro.arch.intr;
 const FixedSizeQueue = zakuro.lib.queue.FixedSizeQueue;
 const mm = zakuro.mm;
+const acpi = zakuro.acpi;
 const timer = zakuro.timer;
 const event = zakuro.event;
 const MemoryMap = mm.uefi.MemoryMap;
@@ -62,14 +63,16 @@ export fn kernel_entry() callconv(.Naked) noreturn {
 export fn kernel_main(
     fb_config: *gfx.FrameBufferConfig,
     memory_map: *MemoryMap,
+    rdsp: *acpi.Rsdp,
 ) callconv(.Win64) noreturn {
     // This function runs on the new kernel stack,
     // but the arguments are still placed in the old stack.
     // Therefore, we copy the arguments in the new stack and pass their pointers to `main`.
     var new_fb_config = fb_config.*;
     var new_memory_map = memory_map.*;
+    var new_rdsp = rdsp.*;
 
-    main(&new_fb_config, &new_memory_map) catch |err| switch (err) {
+    main(&new_fb_config, &new_memory_map, &new_rdsp) catch |err| switch (err) {
         else => {
             log.err("Uncaught kernel error: {?}", .{err});
             @panic("Aborting...");
@@ -83,6 +86,7 @@ export fn kernel_main(
 fn main(
     fb_config: *gfx.FrameBufferConfig,
     memory_map: *MemoryMap,
+    rssp: *acpi.Rsdp,
 ) !void {
     const serial = ser.init();
     klog.init(serial);
@@ -106,6 +110,9 @@ fn main(
 
     // Initialize paging.
     try arch.page.initIdentityMapping(page_allocator);
+
+    // Initialize ACPI.
+    acpi.init(rssp);
 
     // Initialize interrupt queue
     try event.init(16, gpa);
