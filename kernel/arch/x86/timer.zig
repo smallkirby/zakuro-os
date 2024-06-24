@@ -26,7 +26,7 @@ pub fn init(vector: u8, rsdp: *acpi.Rsdp) void {
     @as(*volatile u32, @ptrFromInt(apic.divide_config_register)).* = @intFromEnum(DivideValue.By1);
     const lvt = Lvt{
         .vector = vector,
-        .mode = TimerMode.OneShot,
+        .mode = .OneShot,
     };
     @as(*volatile u32, @ptrFromInt(apic.lvt_timer_register)).* = @bitCast(lvt);
     initial_value = 0xFFFF_FFFF;
@@ -46,7 +46,7 @@ pub fn init(vector: u8, rsdp: *acpi.Rsdp) void {
     @as(*volatile u32, @ptrFromInt(apic.divide_config_register)).* = @intFromEnum(DivideValue.By1);
     const lvt_periodic = Lvt{
         .vector = vector,
-        .mode = TimerMode.Periodic,
+        .mode = .Periodic,
     };
     @as(*volatile u32, @ptrFromInt(apic.lvt_timer_register)).* = @bitCast(lvt_periodic);
     initial_value = lapic_timer_freq / timer_tick_freq;
