@@ -14,7 +14,6 @@ pub const mouse = @import("mouse.zig");
 pub const mm = @import("mm.zig");
 pub const timer = @import("timer.zig");
 pub const event = @import("event.zig");
-pub const acpi = @import("acpi.zig");
 
 pub const lib = @import("lib.zig");
 

@@ -1,19 +1,68 @@
 //! x64 32-bit programmable local APIC timer.
 
+const std = @import("std");
+const log = std.log.scoped(.x64timer);
+
 const apic = @import("apic.zig");
+const acpi = @import("acpi.zig");
+const arch = @import("arch.zig");
+
+/// Initial value of the APIC timer counter.
+var initial_value: u32 = undefined;
+/// Frequency of the Local APIC timer.
+var lapic_timer_freq: u32 = undefined;
+
+/// Timer tick frequency.
+const timer_tick_freq: u32 = 100; // 100 Hz
 
 /// Initialize LAPIC timer with default configuration.
-/// Divider is set to 1.
-pub fn init(vector: u8, initial: u32) void {
-    @as(*volatile u32, @ptrFromInt(apic.divide_config_register)).* = @intFromEnum(DivideValue.By1);
+/// After calling this function, the timer ticks at `timer_tick_freq` Hz,
+/// and every tick generates an interrupt with the specified vector.
+pub fn init(vector: u8, rsdp: *acpi.Rsdp) void {
+    // Init ACPI PM timer.
+    acpi.init(rsdp);
 
+    // Measure the frequency of the APIC timer using ACPI PM timer.
+    @as(*volatile u32, @ptrFromInt(apic.divide_config_register)).* = @intFromEnum(DivideValue.By1);
     const lvt = Lvt{
+        .vector = vector,
+        .mode = TimerMode.OneShot,
+    };
+    @as(*volatile u32, @ptrFromInt(apic.lvt_timer_register)).* = @bitCast(lvt);
+    initial_value = 0xFFFF_FFFF;
+
+    arch.disableIntr();
+    {
+        start();
+        acpi.waitMilliSeconds(100);
+        const elapsed_time = elapsed();
+        stop();
+        lapic_timer_freq = elapsed_time * 10;
+        log.info("Local APIC timer initialized with frequency: {} Hz", .{lapic_timer_freq});
+    }
+    arch.enableIntr();
+
+    // Configure the timer.
+    @as(*volatile u32, @ptrFromInt(apic.divide_config_register)).* = @intFromEnum(DivideValue.By1);
+    const lvt_periodic = Lvt{
         .vector = vector,
         .mode = TimerMode.Periodic,
     };
-    @as(*volatile u32, @ptrFromInt(apic.lvt_timer_register)).* = @bitCast(lvt);
+    @as(*volatile u32, @ptrFromInt(apic.lvt_timer_register)).* = @bitCast(lvt_periodic);
+    initial_value = lapic_timer_freq / timer_tick_freq;
+    @as(*volatile u32, @ptrFromInt(apic.initial_count_register)).* = initial_value;
+}
 
-    @as(*volatile u32, @ptrFromInt(apic.initial_count_register)).* = initial;
+inline fn start() void {
+    @as(*volatile u32, @ptrFromInt(apic.initial_count_register)).* = initial_value;
+}
+
+inline fn stop() void {
+    @as(*volatile u32, @ptrFromInt(apic.initial_count_register)).* = 0;
+}
+
+inline fn elapsed() u32 {
+    return initial_value - @as(*volatile u32, @ptrFromInt(apic.current_count_register)).*;
 }
 
 /// The APIC timer frequency is the processor's bus clock or crystal clock freq

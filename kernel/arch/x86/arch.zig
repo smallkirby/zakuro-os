@@ -10,6 +10,9 @@ pub const timer = @import("timer.zig");
 
 const am = @import("asm.zig");
 const apic = @import("apic.zig");
+const acpi = @import("acpi.zig");
+
+pub const Rsdp = acpi.Rsdp;
 
 /// Page size.
 pub const page_size: usize = 4096;
@@ -40,6 +43,16 @@ pub inline fn enableIntr() void {
 /// Halt the current CPU.
 pub inline fn halt() void {
     am.hlt();
+}
+
+/// Port I/O In instruction.
+pub inline fn in(T: type, port: u16) T {
+    return switch (T) {
+        u8 => am.inb(port),
+        u16 => am.inw(port),
+        u32 => am.inl(port),
+        else => @compileError("Unsupported type for asm in()"),
+    };
 }
 
 test {

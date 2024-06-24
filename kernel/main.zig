@@ -17,7 +17,7 @@ const arch = zakuro.arch;
 const intr = zakuro.arch.intr;
 const FixedSizeQueue = zakuro.lib.queue.FixedSizeQueue;
 const mm = zakuro.mm;
-const acpi = zakuro.acpi;
+const Rsdp = arch.Rsdp;
 const timer = zakuro.timer;
 const event = zakuro.event;
 const MemoryMap = mm.uefi.MemoryMap;
@@ -63,7 +63,7 @@ export fn kernel_entry() callconv(.Naked) noreturn {
 export fn kernel_main(
     fb_config: *gfx.FrameBufferConfig,
     memory_map: *MemoryMap,
-    rdsp: *acpi.Rsdp,
+    rdsp: *Rsdp,
 ) callconv(.Win64) noreturn {
     // This function runs on the new kernel stack,
     // but the arguments are still placed in the old stack.
@@ -86,7 +86,7 @@ export fn kernel_main(
 fn main(
     fb_config: *gfx.FrameBufferConfig,
     memory_map: *MemoryMap,
-    rssp: *acpi.Rsdp,
+    rsdp: *Rsdp,
 ) !void {
     const serial = ser.init();
     klog.init(serial);
@@ -110,9 +110,6 @@ fn main(
 
     // Initialize paging.
     try arch.page.initIdentityMapping(page_allocator);
-
-    // Initialize ACPI.
-    acpi.init(rssp);
 
     // Initialize interrupt queue
     try event.init(16, gpa);
@@ -153,7 +150,7 @@ fn main(
 
     // Initialize local APIC timer.
     intr.registerHandler(intr.timer_interrupt, &timerHandler);
-    timer.init(intr.timer_interrupt, gpa);
+    timer.init(intr.timer_interrupt, gpa, rsdp);
 
     // Initialize PCI devices.
     try initPci(gpa);

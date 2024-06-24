@@ -11,10 +11,10 @@ var total_tick: u64 = 0;
 var timers: ArrayList(Timer) = undefined;
 
 /// Initialize a Local APIC timer.
-pub fn init(vector: u8, allocator: Allocator) void {
+pub fn init(vector: u8, allocator: Allocator, rsdp: *arch.Rsdp) void {
     total_tick = 0;
     timers = ArrayList(Timer).init(allocator);
-    arch.timer.init(vector, 0x0100_0000);
+    arch.timer.init(vector, rsdp);
 }
 
 /// Initiate an new timer with the given timeout.

@@ -1,4 +1,10 @@
+//! ACPI (Advanced Configuration and Power Interface) support.
+//! This file is expected to be used for ACPI PM timer.
+
 const std = @import("std");
+
+const zakuro = @import("zakuro");
+const arch = zakuro.arch;
 
 const AcpiError = error{
     InvalidSignature,
@@ -7,6 +13,11 @@ const AcpiError = error{
     InvalidExtendedChecksum,
 };
 
+/// Frequency of the ACPI PM timer.
+const pm_timer_freq: u64 = 3_579_545; // 3.579545 MHz
+
+/// Pointer to FADT.
+/// You MUST call `init()` before using this pointer.
 var fadt: ?*Fadt = null;
 
 /// Initialize ACPI.
@@ -33,6 +44,28 @@ pub fn init(rsdp: *Rsdp) void {
             break @as(*Fadt, @ptrCast(ent));
         } else |_| {}
     } else @panic("FADT not found.");
+}
+
+/// Wait for the specified milliseconds using ACPI PM timer.
+/// This function is busy-waiting.
+pub fn waitMilliSeconds(msec: u64) void {
+    if (fadt) |f| {
+        const pm_timer_32bit = (f.flags >> 8) & 1 == 1;
+        const port: u16 = @truncate(f.pm_tmr_blk);
+        const start = arch.in(u32, @truncate(f.pm_tmr_blk));
+        var end = start + msec * pm_timer_freq / 1000;
+
+        if (!pm_timer_32bit) {
+            end &= 0x00FF_FFFF; // 24-bit
+        }
+        if (end < start) {
+            // Timer overflowed. Wait until the timer resets to zero.
+            while (arch.in(u32, port) >= start) {}
+        }
+
+        // Wait until the timer reaches the end.
+        while (arch.in(u32, port) < end) {}
+    } else @panic("ACPI is not initialized.");
 }
 
 /// Calculate the checksum of RSDP structure.
