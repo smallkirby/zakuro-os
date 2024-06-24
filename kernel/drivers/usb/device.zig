@@ -215,7 +215,16 @@ pub const UsbDevice = struct {
             }
 
             // Create a class driver from the found interface descriptor.
-            const class_driver = class.newClassDriver(self, if_desc.*, self.allocator) catch continue; // TODO;
+            const class_driver = class.newClassDriver(
+                self,
+                if_desc.*,
+                self.allocator,
+            ) catch |err| switch (err) {
+                error.AllocationFailed => @panic("Memory allocation for class driver failed."),
+                error.InvalidPhase => @panic("Invalid phase for class driver instantiation."),
+                else => return err,
+            };
+
             var num_found_eps: usize = 0;
             if_found = true;
             log.debug("Slot {d:0>2}: Class driver instantiated.", .{self.dev.slot_id});

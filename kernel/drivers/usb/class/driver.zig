@@ -1,13 +1,14 @@
 //! Base struct of USB class drivers.
 
 const std = @import("std");
+const log = std.log.scoped(.uclass);
+
 const zakuro = @import("zakuro");
 const UsbDevice = zakuro.drivers.usb.device.UsbDevice;
 const EndpoinInfo = zakuro.drivers.usb.endpoint.EndpointInfo;
 const EndpointId = zakuro.drivers.usb.endpoint.EndpointId;
 const default_control_pipe_id = zakuro.drivers.usb.endpoint.default_control_pipe_id;
 const SetupData = zakuro.drivers.usb.setupdata.SetupData;
-const log = std.log.scoped(.uclass);
 
 pub const ClassDriverError = error{
     /// Failed to allocater memory.

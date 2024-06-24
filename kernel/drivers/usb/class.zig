@@ -8,8 +8,9 @@ const ClassDriver = @import("class/driver.zig").ClassDriver;
 const DriverError = @import("class/driver.zig").ClassDriverError;
 
 pub const mouse = @import("class/mouse.zig");
+pub const keyboard = @import("class/keyboard.zig");
 
-const ClassError = error{
+pub const ClassError = error{
     UnsupportedClass,
     AllocationFailed,
     InvalidPhase,
@@ -17,25 +18,34 @@ const ClassError = error{
 };
 
 /// Get a new class driver.
-/// TODO: change return type for other class drivers.
 pub fn newClassDriver(
     dev: *UsbDevice,
     if_desc: descs.InterfaceDescriptor,
     allocator: Allocator,
 ) ClassError!ClassDriver {
     if (if_desc.interface_class == 0x3 and if_desc.interface_subclass == 0x1) { // HID boot
-        if (if_desc.interface_protocol == 0x2) {
+        if (mouse.isMe(if_desc)) {
             return mouse.MouseDriver.new(
                 dev,
                 if_desc.interface_number,
                 allocator,
-            ) catch |err| switch (err) {
-                DriverError.AllocationFailed => ClassError.AllocationFailed,
-                DriverError.InvalidPhase => ClassError.InvalidPhase,
-                else => ClassError.Unknown,
-            };
+            ) catch |err| parseError(err);
+        } else if (keyboard.isMe(if_desc)) {
+            return keyboard.KeyboardDriver.new(
+                dev,
+                if_desc.interface_number,
+                allocator,
+            ) catch |err| parseError(err);
         }
     }
 
     return ClassError.UnsupportedClass;
+}
+
+fn parseError(err: anytype) ClassError {
+    return switch (err) {
+        DriverError.AllocationFailed => ClassError.AllocationFailed,
+        DriverError.InvalidPhase => ClassError.InvalidPhase,
+        else => ClassError.Unknown,
+    };
 }

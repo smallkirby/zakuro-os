@@ -1,14 +1,17 @@
 //! This file provides a USB HID mouse class driver.
 
 const std = @import("std");
+const log = std.log.scoped(.mouse);
+const Allocator = std.mem.Allocator;
+
 const ClassDriver = @import("driver.zig").ClassDriver;
 const Error = @import("driver.zig").ClassDriverError;
-const Allocator = std.mem.Allocator;
+
 const zakuro = @import("zakuro");
 const UsbDevice = zakuro.drivers.usb.device.UsbDevice;
-const log = std.log.scoped(.mouse);
+const InterfaceDescriptor = @import("../descriptor.zig").InterfaceDescriptor;
 
-/// Observer for the mouse movements.
+/// Instance of observer for the mouse movements.
 pub var mouse_observer: ?*const MouseObserver = null;
 
 /// USB HID mouse class driver.
@@ -32,6 +35,7 @@ pub const MouseDriver = struct {
     }
 
     fn onDataReceived(ctx: *anyopaque, buf: []u8) void {
+        // TODO: should remove ctx argument?
         _ = ctx;
 
         const btn: u8 = buf[0];
@@ -42,6 +46,11 @@ pub const MouseDriver = struct {
         }
     }
 };
+
+/// Return true if the descriptor is for a mouse device.
+pub fn isMe(desc: InterfaceDescriptor) bool {
+    return desc.interface_protocol == 0x02;
+}
 
 /// Observer for the mouse driver.
 /// The observer can be notified when the mouse moves.

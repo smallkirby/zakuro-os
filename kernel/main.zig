@@ -13,6 +13,7 @@ const color = zakuro.color;
 const pci = zakuro.pci;
 const drivers = zakuro.drivers;
 const mouse = zakuro.mouse;
+const kbd = zakuro.keyboard;
 const arch = zakuro.arch;
 const intr = zakuro.arch.intr;
 const FixedSizeQueue = zakuro.lib.queue.FixedSizeQueue;
@@ -159,9 +160,8 @@ fn main(
     try initMouseCursor(fb_config, gpa);
     layers.flush();
 
-    // Set example timers
-    try timer.newTimer(200, 0);
-    try timer.newTimer(300, 1);
+    // Initialize keyboard
+    try initKeyboard(gpa);
 
     // Loop to process interrupt messages
     while (true) {
@@ -291,6 +291,11 @@ fn initMouseCursor(fb_config: *gfx.FrameBufferConfig, allocator: Allocator) !voi
     // Register mouse movement observer
     const mouse_observer = try cursor.observer(allocator);
     zakuro.drivers.usb.cls_mouse.mouse_observer = mouse_observer;
+}
+
+fn initKeyboard(allocator: Allocator) !void {
+    var keyboard = kbd.Keyboard.new();
+    zakuro.drivers.usb.cls_keyboard.keyboard_observer = try keyboard.observer(allocator);
 }
 
 // TODO: Move this to a proper place.
