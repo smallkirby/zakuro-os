@@ -99,7 +99,7 @@ pub const Console = struct {
         }
 
         // Flush the console to render.
-        gfx.layer.getLayers().flush();
+        gfx.layer.getLayers().flushLayer(self.window);
 
         return bytes.len;
     }

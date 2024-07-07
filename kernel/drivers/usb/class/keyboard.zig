@@ -34,12 +34,9 @@ pub const KeyboardDriver = struct {
         };
     }
 
-    fn onDataReceived(ctx: *anyopaque, buf: []u8) void {
-        // TODO: should remove ctx argument?
-        _ = ctx;
-
+    fn onDataReceived(_: *anyopaque, buf: []u8) void {
         if (keyboard_observer) |observer| {
-            observer.onEvent(KeyEvent.new(buf[0..@sizeOf(KeyEvent)]));
+            observer.onEvent(RawKeyEvent.new(buf[0..@sizeOf(RawKeyEvent)]));
         }
     }
 };
@@ -59,17 +56,17 @@ pub const KeyboardObserver = struct {
 
     const Self = @This();
     const VTable = struct {
-        onEvent: *const fn (*anyopaque, KeyEvent) void,
+        onEvent: *const fn (*anyopaque, RawKeyEvent) void,
     };
 
-    pub fn onEvent(self: *const Self, event: KeyEvent) void {
+    pub fn onEvent(self: *const Self, event: RawKeyEvent) void {
         self.vtable.onEvent(self.ptr, event);
     }
 };
 
-/// TODO: doc
-pub const KeyEvent = packed struct(u64) {
-    modifier: u8,
+/// Raw key event sent by keyboard USB driver.
+pub const RawKeyEvent = packed struct(u64) {
+    modifier: ModifierKey,
     _reserved: u8,
     key1: u8,
     key2: u8,
@@ -78,9 +75,9 @@ pub const KeyEvent = packed struct(u64) {
     key5: u8,
     key6: u8,
 
-    pub fn new(data: *[8]u8) KeyEvent {
+    pub fn new(data: *[8]u8) RawKeyEvent {
         return .{
-            .modifier = data[0],
+            .modifier = @bitCast(data[0]),
             ._reserved = data[1],
             .key1 = data[2],
             .key2 = data[3],
@@ -90,4 +87,15 @@ pub const KeyEvent = packed struct(u64) {
             .key6 = data[7],
         };
     }
+};
+
+pub const ModifierKey = packed struct(u8) {
+    control: bool,
+    shift: bool,
+    alt: bool,
+    gui: bool,
+    rcontrol: bool,
+    rshift: bool,
+    ralt: bool,
+    rgui: bool,
 };

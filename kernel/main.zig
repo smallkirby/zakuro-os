@@ -114,7 +114,7 @@ fn main(
 
     // Initialize interrupt queue
     try event.init(16, gpa);
-    intr.registerHandler(intr.mouse_interrupt, &mouseHandler);
+    intr.registerHandler(intr.xhc_interrupt, &xhcHandler);
 
     // Initialize a pixel writer
     const pixel_writer = gfx.PixelWriter.new(fb_config);
@@ -186,8 +186,9 @@ fn main(
         // Process the message
         if (event.pop()) |msg| {
             switch (msg) {
-                .mouse => handleMouseMessage(),
+                .xhc => handleXhcEvent(),
                 .timer => |t| log.info("Timer Event: ID={d}", .{t.id}),
+                .kbd => {},
             }
         }
     }
@@ -235,7 +236,7 @@ fn initPci(allocator: Allocator) !void {
     const xhc_dev = xhc_maybe orelse @panic("xHC controller not found.");
     try xhc_dev.configureMsi(
         .{ .dest_id = arch.getLapicId() },
-        .{ .vector = intr.mouse_interrupt, .assert = true },
+        .{ .vector = intr.xhc_interrupt, .assert = true },
         0,
     );
 
@@ -298,24 +299,25 @@ fn initKeyboard(allocator: Allocator) !void {
     zakuro.drivers.usb.cls_keyboard.keyboard_observer = try keyboard.observer(allocator);
 }
 
-// TODO: Move this to a proper place.
-fn mouseHandler(_: *intr.Context) void {
-    event.push(.mouse) catch |err| {
-        log.err("Failed to push mouse event to the queue: {?}", .{err});
+/// Interrupt handler for xHC controller.
+/// It just pushes an event to the queue.
+fn xhcHandler(_: *intr.Context) void {
+    event.push(.xhc) catch |err| {
+        log.err("Failed to push xHC event to the queue: {?}", .{err});
     };
     arch.notifyEoi();
 }
 
-fn timerHandler(_: *intr.Context) void {
-    timer.tick();
-    arch.notifyEoi();
-}
-
-// TODO: Move this to a proper place.
-fn handleMouseMessage() void {
+/// Handle xHC events in the queue.
+fn handleXhcEvent() void {
     while (xhc.hasEvent()) {
         xhc.processEvent() catch |err| {
             log.err("Failed to process xHC event: {?}", .{err});
         };
     }
+}
+
+fn timerHandler(_: *intr.Context) void {
+    timer.tick();
+    arch.notifyEoi();
 }

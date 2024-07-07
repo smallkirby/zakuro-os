@@ -35,13 +35,15 @@ pub fn pop() ?EventMessage {
 }
 
 const EventMessageType = enum {
-    mouse,
+    xhc,
+    kbd,
     timer,
 };
 
 /// Event message.
 /// The message is enqueued in the interrupt handler and processed in the main loop.
 pub const EventMessage = union(EventMessageType) {
-    mouse: void,
+    xhc: void,
+    kbd: zakuro.keyboard.KeyEvent,
     timer: zakuro.timer.TimerMessage,
 };

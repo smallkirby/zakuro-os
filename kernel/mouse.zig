@@ -8,6 +8,7 @@ const zakuro = @import("zakuro");
 const gfx = zakuro.gfx;
 const Vector = zakuro.Vector;
 const colors = zakuro.color;
+const event = zakuro.event;
 const MouseObserver = zakuro.drivers.usb.MouseObserver;
 const getLayers = gfx.layer.getLayers();
 
@@ -138,7 +139,7 @@ pub const MouseCursor = struct {
         // Flush the mouse.
         self.prev_btn = btn;
         self.drawMouse();
-        gfx.layer.getLayers().flush();
+        gfx.layer.getLayers().flush(); // Flush all layers to erase the mouse cursor.
     }
 
     /// Erase mouse cursor by overwriting with the background color.
@@ -162,4 +163,11 @@ const ButtonState = packed struct(u8) {
     left_pressed: bool,
     right_pressed: bool,
     _reserved: u6,
+};
+
+pub const MouseEvent = struct {
+    mouse: *MouseCursor,
+    btn: ButtonState,
+    delta_x: i8,
+    delta_y: i8,
 };

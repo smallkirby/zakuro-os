@@ -158,7 +158,7 @@ const controlProtectionExcepton = 21;
 const num_system_exceptions = 32;
 
 // User-defined interrupt vectors.
-pub const mouse_interrupt = 0x30;
+pub const xhc_interrupt = 0x30;
 pub const timer_interrupt = 0x31;
 
 /// Get the name of an exception.
