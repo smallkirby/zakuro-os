@@ -1,4 +1,4 @@
-//! Eevnt is a enqueued message that is expected to be processed in the main loop lazily.
+//! Eevnt is a queued message that is expected to be processed in the main loop lazily.
 //! The main purpose of events is to decouple the interrupt handler and the main loop.
 //! In interrupt handlers, an event message is generated an enqueued,
 //! algouth the message is not processed immediately resulting in a smaller cost of interrupt handling.
